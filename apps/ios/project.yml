@@ -24,11 +24,14 @@ targets:
           UIApplicationSupportsMultipleScenes: false
         UILaunchScreen: {}
         MobileAPIBaseURL: "$(MOBILE_API_BASE_URL)"
+        MobileAPIAuthToken: "$(MOBILE_API_AUTH_TOKEN)"
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
+        NSLocalNetworkUsageDescription: "Connect to the local Auto Video Gen render backend while testing on a physical device."
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.autovideogen.mobile
         MOBILE_API_BASE_URL: "http://127.0.0.1:4319"
+        MOBILE_API_AUTH_TOKEN: ""
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor

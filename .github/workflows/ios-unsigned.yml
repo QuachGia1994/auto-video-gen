@@ -2,6 +2,11 @@ name: iOS Unsigned IPA
 
 on:
   workflow_dispatch:
+    inputs:
+      mobile_api_base_url:
+        description: "Physical-device backend URL (for example http://192.168.1.10:4319)"
+        required: false
+        default: "http://127.0.0.1:4319"
   push:
     branches: [main]
     paths:
@@ -33,6 +38,9 @@ jobs:
         run: xcodegen generate
 
       - name: Build unsigned app
+        env:
+          MOBILE_API_BASE_URL: ${{ inputs.mobile_api_base_url || 'http://127.0.0.1:4319' }}
+          MOBILE_API_AUTH_TOKEN: ${{ secrets.IOS_MOBILE_API_TOKEN }}
         run: |
           xcodebuild \
             -project AutoVideoGen.xcodeproj \
@@ -44,6 +52,8 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
+            MOBILE_API_BASE_URL="$MOBILE_API_BASE_URL" \
+            MOBILE_API_AUTH_TOKEN="$MOBILE_API_AUTH_TOKEN" \
             build
 
       - name: Package unsigned IPA

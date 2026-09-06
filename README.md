@@ -55,7 +55,7 @@ Toàn bộ video dưới đây được tạo **100% tự động** từ kịch 
 Frontend mobile được tách khỏi pipeline Node/TypeScript để giữ UI native theo từng nền tảng:
 - **iOS 27+**: SwiftUI native trong `apps/ios`, dùng `TabView`, `NavigationStack` và system toolbar/tab bar.
 - **Android**: Expo SDK 57 + React Native 0.86 trong `apps/android`, dùng Expo Router cho Create, Pipeline, Preview, Library và Settings.
-- **Mobile backend bridge**: `npm run mobile:api` mở API local tại `127.0.0.1:4319`. `POST /v1/generate` nhận URL/Text/Markdown, sinh `script.json` qua một Chat Completions endpoint tương thích OpenAI, validate bằng schema hiện có rồi đưa thẳng vào render pipeline. Render-job status, SSE progress và MP4 vẫn dùng `/v1/render-jobs/:id`.
+- **Mobile backend bridge**: `npm run mobile:api` mặc định chỉ mở API tại `127.0.0.1:4319`. `POST /v1/generate` nhận URL/Text/Markdown, sinh `script.json` qua một Chat Completions endpoint tương thích OpenAI, validate bằng schema hiện có rồi đưa thẳng vào render pipeline. Render-job status, SSE progress và MP4 vẫn dùng `/v1/render-jobs/:id`. Khi test iPhone thật qua LAN, chỉ mở backend bằng `MOBILE_API_HOST=0.0.0.0` cùng một `MOBILE_API_TOKEN` dài/ngẫu nhiên; server từ chối chạy non-loopback nếu không có token.
 - **Cloudflare Workers AI free-first, nhưng không khóa provider**: repo kèm Worker `cloudflare/script-llm` dùng binding `env.AI` và mặc định `@cf/zai-org/glm-4.7-flash`. Backend vẫn chỉ biết giao thức Chat Completions tương thích OpenAI qua `SCRIPT_LLM_BASE_URL`, `SCRIPT_LLM_MODEL`, `SCRIPT_LLM_API_KEY`, nên có thể thay provider khác. Nếu ba biến này thiếu, render từ `script.json` vẫn chạy nhưng `/v1/generate` trả lỗi cấu hình rõ ràng; không fallback dữ liệu giả.
 - **URL input được giới hạn trust boundary**: backend chỉ fetch HTTP(S) public, pin địa chỉ IP đã kiểm tra cho từng request và kiểm tra lại mọi redirect. `og:image` không được đưa vào mobile-generated render job ở stage này, nên nguồn URL không thể kéo pipeline sang private/local network qua ảnh.
 
@@ -90,7 +90,9 @@ npm run typecheck
 npx --yes expo-doctor
 ```
 
-Với Android máy thật qua USB, `adb reverse tcp:4319 tcp:4319` cho phép app dùng backend loopback. Tạo project iOS trên macOS có Xcode 27 và XcodeGen; `MOBILE_API_BASE_URL` mặc định là `http://127.0.0.1:4319` cho simulator và có thể override khi test thiết bị thật:
+Với Android máy thật qua USB, `adb reverse tcp:4319 tcp:4319` cho phép app dùng backend loopback. Nếu backend có `MOBILE_API_TOKEN`, đặt cùng giá trị vào `EXPO_PUBLIC_MOBILE_API_TOKEN`.
+
+Với iPhone thật trên cùng LAN, ví dụ PC là `192.168.1.10`, cấu hình `.env.local` trên PC bằng `MOBILE_API_HOST=0.0.0.0` và `MOBILE_API_TOKEN=<random-secret>`, rồi build iOS với `MOBILE_API_BASE_URL=http://192.168.1.10:4319` và cùng token. `MobileAPIBaseURL`/`MobileAPIAuthToken` được inject qua build settings; token không được commit. Workflow `iOS Unsigned IPA` nhận URL qua manual input và đọc token từ GitHub Secret `IOS_MOBILE_API_TOKEN`.
 
 ```bash
 cd apps/ios

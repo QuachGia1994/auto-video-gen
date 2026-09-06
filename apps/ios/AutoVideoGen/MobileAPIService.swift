@@ -6,6 +6,12 @@ enum BackendConfig {
         guard let raw, !raw.isEmpty else { return nil }
         return URL(string: raw)
     }
+
+    static var authToken: String? {
+        let raw = (Bundle.main.object(forInfoDictionaryKey: "MobileAPIAuthToken") as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let raw, !raw.isEmpty else { return nil }
+        return raw
+    }
 }
 
 private struct RenderJobResponse: Decodable, Sendable {
@@ -37,10 +43,16 @@ private struct MobileAPIError: LocalizedError {
 
 struct MobileAPIVideoGenerationService: VideoGenerationService {
     private let baseURL: URL?
+    private let authToken: String?
     private let session: URLSession
 
-    init(baseURL: URL? = BackendConfig.baseURL, session: URLSession = .shared) {
+    init(
+        baseURL: URL? = BackendConfig.baseURL,
+        authToken: String? = BackendConfig.authToken,
+        session: URLSession = .shared
+    ) {
         self.baseURL = baseURL
+        self.authToken = authToken
         self.session = session
     }
 
@@ -113,6 +125,7 @@ struct MobileAPIVideoGenerationService: VideoGenerationService {
         request.httpMethod = method
         request.httpBody = body
         if body != nil { request.setValue("application/json", forHTTPHeaderField: "Content-Type") }
+        if let authToken { request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization") }
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw MobileAPIError(message: "Invalid backend response") }
         guard (200..<300).contains(http.statusCode) else {

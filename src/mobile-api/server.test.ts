@@ -23,11 +23,15 @@ async function loadFixtureScript() {
   return ScriptSchema.parse(raw);
 }
 
-async function startServer(runner: PipelineRunner, generation?: { sourceResolver: SourceResolver; scriptGenerator: ScriptGenerator }) {
+async function startServer(
+  runner: PipelineRunner,
+  generation?: { sourceResolver: SourceResolver; scriptGenerator: ScriptGenerator },
+  writeToken?: string,
+) {
   const outputRoot = await mkdtemp(join(tmpdir(), "auto-video-gen-api-"));
   tempDirs.push(outputRoot);
   const manager = createRenderJobManager({ outputRoot, runPipeline: runner });
-  const server = createMobileApiServer(manager, generation);
+  const server = createMobileApiServer(manager, generation, { writeToken });
   servers.push(server);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address() as AddressInfo;
@@ -118,6 +122,30 @@ describe("createMobileApiServer", () => {
     });
     expect(response.status).toBe(503);
     expect(await response.json()).toEqual({ error: "source_generation_not_configured" });
+  });
+
+  it("requires the configured bearer token for write endpoints", async () => {
+    const fixture = await loadFixtureScript();
+    const baseUrl = await startServer(async () => {}, undefined, "physical-device-token");
+
+    const unauthorized = await fetch(`${baseUrl}/v1/render-jobs`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ script: fixture }),
+    });
+    expect(unauthorized.status).toBe(401);
+    expect(unauthorized.headers.get("www-authenticate")).toBe("Bearer");
+    expect(await unauthorized.json()).toEqual({ error: "unauthorized" });
+
+    const authorized = await fetch(`${baseUrl}/v1/render-jobs`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer physical-device-token",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ script: fixture }),
+    });
+    expect(authorized.status).toBe(202);
   });
 
   it("streams current and terminal job states over SSE", async () => {

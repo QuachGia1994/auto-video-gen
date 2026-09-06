@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { ScriptSchema } from "../render/script-schema.js";
@@ -9,6 +10,10 @@ const MAX_BODY_BYTES = 1_000_000;
 
 type RenderJobManager = ReturnType<typeof createRenderJobManager>;
 type JsonResult = { ok: true; data: unknown } | { ok: false; status: number; error: string };
+
+type MobileApiServerOptions = {
+  writeToken?: string;
+};
 
 function sendJson(response: ServerResponse, status: number, body: unknown) {
   response.writeHead(status, { "content-type": "application/json; charset=utf-8" });
@@ -44,9 +49,27 @@ function matchJobPath(pathname: string) {
   return { id: match[1]!, action: match[2] ?? "status" } as const;
 }
 
+function hasValidWriteToken(request: IncomingMessage, expectedToken?: string) {
+  if (!expectedToken) return true;
+  const authorization = request.headers.authorization;
+  if (!authorization?.startsWith("Bearer ")) return false;
+  const actualToken = authorization.slice("Bearer ".length);
+  const expected = Buffer.from(expectedToken);
+  const actual = Buffer.from(actualToken);
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
+
+function requireWriteAuthorization(request: IncomingMessage, response: ServerResponse, expectedToken?: string) {
+  if (hasValidWriteToken(request, expectedToken)) return true;
+  response.setHeader("www-authenticate", "Bearer");
+  sendJson(response, 401, { error: "unauthorized" });
+  return false;
+}
+
 export function createMobileApiServer(
   manager: RenderJobManager,
   generation?: { sourceResolver: SourceResolver; scriptGenerator: ScriptGenerator },
+  options: MobileApiServerOptions = {},
 ) {
   return createServer(async (request, response) => {
     const method = request.method ?? "GET";
@@ -58,6 +81,7 @@ export function createMobileApiServer(
     }
 
     if (method === "POST" && url.pathname === "/v1/generate") {
+      if (!requireWriteAuthorization(request, response, options.writeToken)) return;
       if (!generation) {
         sendJson(response, 503, { error: "source_generation_not_configured" });
         return;
@@ -87,6 +111,7 @@ export function createMobileApiServer(
     }
 
     if (method === "POST" && url.pathname === "/v1/render-jobs") {
+      if (!requireWriteAuthorization(request, response, options.writeToken)) return;
       const body = await readJsonBody(request);
       if (!body.ok) {
         sendJson(response, body.status, { error: body.error });

@@ -23,6 +23,14 @@ function backendBaseUrl() {
   return value.replace(/\/$/, '');
 }
 
+function backendHeaders(hasBody: boolean) {
+  const token = process.env.EXPO_PUBLIC_MOBILE_API_TOKEN?.trim();
+  const headers: Record<string, string> = {};
+  if (hasBody) headers['content-type'] = 'application/json';
+  if (token) headers.authorization = `Bearer ${token}`;
+  return headers;
+}
+
 async function readError(response: Response) {
   try {
     const body = await response.json() as { message?: string; error?: string };
@@ -64,7 +72,7 @@ export function createMobileApiGenerationGateway(): GenerationGateway {
 
       const createdResponse = await fetch(`${baseUrl}/v1/generate`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: backendHeaders(true),
         body: JSON.stringify(request),
       });
       if (!createdResponse.ok) throw new Error(await readError(createdResponse));
@@ -83,7 +91,9 @@ export function createMobileApiGenerationGateway(): GenerationGateway {
         if (Date.now() >= deadline) throw new Error('Generation timed out after 30 minutes');
         await sleep(pollInterval);
         pollInterval = Math.min(Math.round(pollInterval * 1.4), MAX_POLL_INTERVAL_MS);
-        const statusResponse = await fetch(`${baseUrl}/v1/render-jobs/${job.id}`);
+        const statusResponse = await fetch(`${baseUrl}/v1/render-jobs/${job.id}`, {
+          headers: backendHeaders(false),
+        });
         if (!statusResponse.ok) throw new Error(await readError(statusResponse));
         job = await statusResponse.json() as RenderJobResponse;
       }
