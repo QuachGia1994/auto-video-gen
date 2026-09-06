@@ -56,8 +56,23 @@ Frontend mobile được tách khỏi pipeline Node/TypeScript để giữ UI na
 - **iOS 27+**: SwiftUI native trong `apps/ios`, dùng `TabView`, `NavigationStack` và system toolbar/tab bar.
 - **Android**: Expo SDK 57 + React Native 0.86 trong `apps/android`, dùng Expo Router cho Create, Pipeline, Preview, Library và Settings.
 - **Mobile backend bridge**: `npm run mobile:api` mở API local tại `127.0.0.1:4319`. `POST /v1/generate` nhận URL/Text/Markdown, sinh `script.json` qua một Chat Completions endpoint tương thích OpenAI, validate bằng schema hiện có rồi đưa thẳng vào render pipeline. Render-job status, SSE progress và MP4 vẫn dùng `/v1/render-jobs/:id`.
-- **Provider không bị hard-code**: cấu hình `SCRIPT_LLM_BASE_URL`, `SCRIPT_LLM_MODEL`, `SCRIPT_LLM_API_KEY` trong `.env.local`. Nếu ba biến này không được cấu hình, API render từ `script.json` vẫn chạy nhưng `/v1/generate` trả lỗi cấu hình rõ ràng; không fallback sang dữ liệu giả.
+- **Cloudflare Workers AI free-first, nhưng không khóa provider**: repo kèm Worker `cloudflare/script-llm` dùng binding `env.AI` và mặc định `@cf/zai-org/glm-4.7-flash`. Backend vẫn chỉ biết giao thức Chat Completions tương thích OpenAI qua `SCRIPT_LLM_BASE_URL`, `SCRIPT_LLM_MODEL`, `SCRIPT_LLM_API_KEY`, nên có thể thay provider khác. Nếu ba biến này thiếu, render từ `script.json` vẫn chạy nhưng `/v1/generate` trả lỗi cấu hình rõ ràng; không fallback dữ liệu giả.
 - **URL input được giới hạn trust boundary**: backend chỉ fetch HTTP(S) public, pin địa chỉ IP đã kiểm tra cho từng request và kiểm tra lại mọi redirect. `og:image` không được đưa vào mobile-generated render job ở stage này, nên nguồn URL không thể kéo pipeline sang private/local network qua ảnh.
+
+Thiết lập Cloudflare Workers AI (khuyến nghị cho source → script):
+
+```bash
+# Đăng nhập Cloudflare một lần
+npx wrangler login
+
+# Đặt một bearer secret riêng cho Worker; không dùng Cloudflare API token làm app secret
+npx wrangler secret put API_SECRET --config cloudflare/script-llm/wrangler.jsonc
+
+# Deploy Worker có AI binding
+npx wrangler deploy --config cloudflare/script-llm/wrangler.jsonc
+```
+
+Sau deploy, đặt `SCRIPT_LLM_BASE_URL=https://<worker>.workers.dev/v1`, `SCRIPT_LLM_MODEL=@cf/zai-org/glm-4.7-flash` và `SCRIPT_LLM_API_KEY` bằng cùng `API_SECRET` trong `.env.local`. Worker ép non-thinking mode cho tác vụ JSON để tránh đốt completion budget vào reasoning; Cloudflare credential chỉ dùng lúc quản trị/deploy và không nằm trong mobile app.
 
 Chạy mobile backend:
 

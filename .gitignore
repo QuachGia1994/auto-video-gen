@@ -3,6 +3,8 @@ dist/
 output/
 .env.local
 .env
+.dev.vars*
+.wrangler/
 *.log
 .DS_Store
 # One-off debug scripts
