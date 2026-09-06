@@ -1,5 +1,9 @@
 import { spawn } from "node:child_process";
+import { createRequire } from "node:module";
 import { log } from "../utils/logger.js";
+
+const require = createRequire(import.meta.url);
+const HYPERFRAMES_CLI = require.resolve("hyperframes/dist/cli.js");
 
 export type HyperframesProgress = {
   percent: number;
@@ -29,7 +33,7 @@ export async function renderWithHyperframes(args: RenderArgs): Promise<void> {
   const { compositionDir, outputPath, fps = 30, quality = "standard", onProgress } = args;
 
   const spawnArgs = [
-    "hyperframes",
+    HYPERFRAMES_CLI,
     "render",
     compositionDir,
     "--output",
@@ -41,8 +45,7 @@ export async function renderWithHyperframes(args: RenderArgs): Promise<void> {
   ];
 
   await new Promise<void>((resolve, reject) => {
-    const executable = process.platform === "win32" ? "npx.cmd" : "npx";
-    const proc = spawn(executable, spawnArgs, {
+    const proc = spawn(process.execPath, spawnArgs, {
       stdio: ["ignore", "pipe", "pipe"],
       shell: false,
     });
