@@ -1,0 +1,69 @@
+name: iOS Unsigned IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "apps/ios/**"
+      - ".github/workflows/ios-unsigned.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: xcode-27
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: apps/ios
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build unsigned app
+        run: |
+          xcodebuild \
+            -project AutoVideoGen.xcodeproj \
+            -scheme AutoVideoGen \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$PWD/build/DerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Package unsigned IPA
+        run: |
+          APP_PATH="$PWD/build/DerivedData/Build/Products/Release-iphoneos/AutoVideoGen.app"
+          test -d "$APP_PATH"
+          rm -rf build/Payload build/AutoVideoGen-unsigned.ipa
+          mkdir -p build/Payload
+          cp -R "$APP_PATH" build/Payload/
+          if codesign -dv "$APP_PATH" >/dev/null 2>&1; then
+            echo "Expected unsigned .app but a code signature is present"
+            exit 1
+          fi
+          cd build
+          zip -qry AutoVideoGen-unsigned.ipa Payload
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: AutoVideoGen-iOS-unsigned
+          path: apps/ios/build/AutoVideoGen-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14
