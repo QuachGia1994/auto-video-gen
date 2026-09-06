@@ -40,13 +40,28 @@ const HYPERFRAMES_CONFIG = {
   },
 };
 
-export async function runPipeline(scriptPath: string): Promise<void> {
+export type PipelineProgress = {
+  step: number;
+  total: number;
+  message: string;
+};
+
+export type PipelineRunOptions = {
+  onProgress?: (progress: PipelineProgress) => void;
+};
+
+export async function runPipeline(scriptPath: string, options: PipelineRunOptions = {}): Promise<void> {
+  const reportStep = (step: number, message: string) => {
+    log.step(step, TOTAL_STEPS, message);
+    options.onProgress?.({ step, total: TOTAL_STEPS, message });
+  };
+
   const cfg = loadConfig();
   const outputDir = dirname(scriptPath);
   log.info(`Output directory: ${outputDir}`);
 
   // STEP 1
-  log.step(1, TOTAL_STEPS, `Load env + validate script.json (TTS provider: ${cfg.ttsProvider})`);
+  reportStep(1, `Load env + validate script.json (TTS provider: ${cfg.ttsProvider})`);
   const raw = JSON.parse(await readFile(scriptPath, "utf8"));
   // Substitute env placeholder before validation (works for all providers)
   if (raw.voice?.voiceId === "${VIETNAMESE_VOICEID}" || raw.voice?.voiceId === "${VOICE_ID}") {
@@ -59,12 +74,12 @@ export async function runPipeline(scriptPath: string): Promise<void> {
   const script: Script = ScriptSchema.parse(raw);
 
   // STEP 2
-  log.step(2, TOTAL_STEPS, "Write script.txt for CapCut");
+  reportStep(2, "Write script.txt for CapCut");
   const fullText = script.scenes.map((s) => s.voiceText).join("\n\n");
   await writeFile(join(outputDir, "script.txt"), fullText);
 
   // STEP 3 + 4 in parallel
-  log.step(3, TOTAL_STEPS, "Fetch og:image (parallel) + Step 4 TTS");
+  reportStep(3, "Fetch og:image (parallel) + Step 4 TTS");
   const imgPath = join(outputDir, "images", "bg.jpg");
   const imgPromise = fetchImage(script.metadata.source.image, imgPath);
 
@@ -111,7 +126,7 @@ export async function runPipeline(scriptPath: string): Promise<void> {
   }
 
   // STEP 5
-  log.step(5, TOTAL_STEPS, "Concat voice scenes + mix SFX layer");
+  reportStep(5, "Concat voice scenes + mix SFX layer");
   const voiceRawMp3 = join(outputDir, "voice-raw.mp3");
   const voiceMp3 = join(outputDir, "voice.mp3");
   await concatWithSilence(sceneAudio.map((a) => a.path), SCENE_GAP_SEC, voiceRawMp3);
@@ -181,7 +196,7 @@ export async function runPipeline(scriptPath: string): Promise<void> {
   }
 
   // STEP 6 — Compose HTML + write hyperframes project files
-  log.step(6, TOTAL_STEPS, "Compose HTML + project files");
+  reportStep(6, "Compose HTML + project files");
 
   // Resolve TikTok avatar — download URL if provided, else copy bundled default
   // Bundled avatar can be jpg/jpeg/png/webp — pick whichever exists
@@ -238,12 +253,12 @@ export async function runPipeline(scriptPath: string): Promise<void> {
   await copyFile(join(TPL_DIR, "animations.js"), join(outputDir, "animations.js"));
 
   // STEP 7
-  log.step(7, TOTAL_STEPS, "Render with hyperframes");
+  reportStep(7, "Render with hyperframes");
   const videoPath = join(outputDir, "video.mp4");
   await renderWithHyperframes({ compositionDir: outputDir, outputPath: videoPath });
 
   // STEP 8
-  log.step(8, TOTAL_STEPS, "Done");
+  reportStep(8, "Done");
   console.log("\n=== Result ===");
   console.log(`Video:  ${videoPath}`);
   console.log(`Audio:  ${voiceMp3}  (cho CapCut)`);

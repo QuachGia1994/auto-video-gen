@@ -1,0 +1,34 @@
+name: AutoVideoGen
+options:
+  bundleIdPrefix: com.autovideogen
+  deploymentTarget:
+    iOS: "27.0"
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  AutoVideoGen:
+    type: application
+    platform: iOS
+    sources:
+      - path: AutoVideoGen
+    resources:
+      - path: AutoVideoGen/Resources
+    info:
+      path: AutoVideoGen/Info.plist
+      properties:
+        CFBundleDisplayName: Auto Video Gen
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UILaunchScreen: {}
+        MobileAPIBaseURL: "$(MOBILE_API_BASE_URL)"
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.autovideogen.mobile
+        MOBILE_API_BASE_URL: "http://127.0.0.1:4319"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor

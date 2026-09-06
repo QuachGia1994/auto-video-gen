@@ -11,6 +11,7 @@
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
     "pipeline": "tsx src/cli.ts",
+    "mobile:api": "tsx src/mobile-api/cli.ts",
     "rerender": "tsx rerender.ts",
     "typecheck": "tsc --noEmit",
     "build": "tsc",

@@ -1,0 +1,34 @@
+{
+  "expo": {
+    "name": "Auto Video Gen",
+    "slug": "auto-video-gen",
+    "version": "0.1.0",
+    "platforms": ["android"],
+    "orientation": "portrait",
+    "scheme": "autovideogen",
+    "userInterfaceStyle": "dark",
+    "icon": "./assets/icon.png",
+    "android": {
+      "package": "com.autovideogen.mobile.android",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#09101B"
+      }
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#09101B",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 180,
+          "resizeMode": "contain"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
