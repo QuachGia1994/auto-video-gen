@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 @main
 struct AutoVideoGenApp: App {
@@ -27,6 +28,9 @@ struct AutoVideoGenApp: App {
             .environment(\.locale, localizer.language.locale)
             .preferredColorScheme(appearance.colorScheme)
             .animation(.easeOut(duration: 0.28), value: showingSplash)
+            .onChange(of: appModel.isGenerating, initial: true) { _, isGenerating in
+                UIApplication.shared.isIdleTimerDisabled = isGenerating
+            }
             .task {
                 guard showingSplash else { return }
                 try? await Task.sleep(for: .milliseconds(850))
