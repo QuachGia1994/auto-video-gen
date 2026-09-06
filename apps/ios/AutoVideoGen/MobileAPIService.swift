@@ -19,6 +19,7 @@ private struct RenderJobResponse: Decodable, Sendable {
         let step: Int
         let total: Int
         let message: String
+        let fraction: Double?
     }
 
     let id: String
@@ -141,7 +142,10 @@ struct MobileAPIVideoGenerationService: VideoGenerationService {
         if step >= 3 { events.append(.progress(stepID: "voice", value: step >= 5 ? 1 : 0.65)) }
         if step >= 5 { events.append(.progress(stepID: "audio", value: step >= 6 ? 1 : 0.8)) }
         if step >= 6 { events.append(.progress(stepID: "motion", value: step >= 7 ? 1 : 0.85)) }
-        if step >= 7 { events.append(.progress(stepID: "render", value: step >= 8 ? 1 : 0.75)) }
+        if step >= 7 {
+            let renderProgress = step >= 8 ? 1 : min(max(job.progress?.fraction ?? 0.05, 0), 1)
+            events.append(.progress(stepID: "render", value: renderProgress))
+        }
         return events
     }
 }

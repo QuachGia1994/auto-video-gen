@@ -44,6 +44,7 @@ export type PipelineProgress = {
   step: number;
   total: number;
   message: string;
+  fraction?: number;
 };
 
 export type PipelineRunOptions = {
@@ -255,7 +256,18 @@ export async function runPipeline(scriptPath: string, options: PipelineRunOption
   // STEP 7
   reportStep(7, "Render with hyperframes");
   const videoPath = join(outputDir, "video.mp4");
-  await renderWithHyperframes({ compositionDir: outputDir, outputPath: videoPath });
+  await renderWithHyperframes({
+    compositionDir: outputDir,
+    outputPath: videoPath,
+    onProgress: ({ percent, message }) => {
+      options.onProgress?.({
+        step: 7,
+        total: TOTAL_STEPS,
+        message,
+        fraction: Math.max(0, Math.min(percent / 100, 1)),
+      });
+    },
+  });
 
   // STEP 8
   reportStep(8, "Done");
