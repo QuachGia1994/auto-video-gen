@@ -69,6 +69,8 @@ describe("createOpenAICompatibleScriptGenerator", () => {
     expect(requests[0]!.url).toBe("https://api.example.com/v1/chat/completions");
     expect(requests[0]!.authorization).toBe("Bearer secret-key");
     expect(requests[0]!.body.model).toBe("compat-model");
+    expect(requests[0]!.body.temperature).toBe(0.1);
+    expect(requests[0]!.body.max_tokens).toBe(8192);
     expect(requests[0]!.body.messages[0].content).toContain("JSON");
     expect(script.metadata.source).toEqual({ url: "https://example.com/story", domain: "example.com", image: null });
     expect(script.metadata.channel).toBe("CườngIT");

@@ -122,7 +122,12 @@ export function createOpenAICompatibleScriptGenerator({
         authorization: `Bearer ${config.apiKey}`,
         "content-type": "application/json",
       },
-      body: JSON.stringify({ model: config.model, messages }),
+      body: JSON.stringify({
+        model: config.model,
+        messages,
+        temperature: 0.1,
+        max_tokens: 8_192,
+      }),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     const rawText = await response.text();

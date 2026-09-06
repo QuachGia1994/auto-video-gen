@@ -39,10 +39,25 @@ describe("Cloudflare script LLM worker", () => {
     expect(calls[0]!.model).toBe("@cf/zai-org/glm-4.7-flash");
     expect((calls[0]!.input as any).messages).toEqual([{ role: "user", content: "hello" }]);
     expect((calls[0]!.input as any).chat_template_kwargs).toEqual({ enable_thinking: false });
+    expect((calls[0]!.input as any).response_format).toEqual({ type: "json_object" });
     expect((calls[0]!.input as any).max_completion_tokens).toBe(4096);
     expect(body.model).toBe("@cf/zai-org/glm-4.7-flash");
     expect(body.choices[0].message.content).toBe("{\"version\":\"1.0\"}");
     expect(body.usage).toEqual({ prompt_tokens: 12, completion_tokens: 7 });
+  });
+
+  it("serializes structured Workers AI response objects as JSON content", async () => {
+    const env = makeEnv();
+    env.AI.run = async () => ({ response: { version: "1.0", scenes: [] } });
+    const response = await worker.fetch(makeRequest("/v1/chat/completions", {
+      method: "POST",
+      headers: { authorization: "Bearer test-secret", "content-type": "application/json" },
+      body: JSON.stringify({ messages: [{ role: "user", content: "json please" }] }),
+    }), env);
+    const body = await response.json() as any;
+
+    expect(response.status).toBe(200);
+    expect(JSON.parse(body.choices[0].message.content)).toEqual({ version: "1.0", scenes: [] });
   });
 
   it("rejects invalid bodies before calling Workers AI", async () => {

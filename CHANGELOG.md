@@ -20,3 +20,4 @@ All notable changes to this project are recorded here.
 - Keep the LLM provider swappable through environment configuration and validate/retry model JSON with the existing Zod `ScriptSchema` before rendering.
 - Bound render-job retention and mobile polling duration/backoff so local API state, disk usage, and clients do not grow or poll indefinitely.
 - Run the Cloudflare GLM gateway in non-thinking mode for deterministic JSON generation and lower Workers AI Neuron usage.
+- Force Workers AI JSON mode for script generation, raise the completion budget to 8,192 tokens at low temperature, and fix mobile pipeline headers so failed generations are never labeled complete.

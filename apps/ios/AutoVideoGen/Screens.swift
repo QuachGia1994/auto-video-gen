@@ -207,9 +207,9 @@ struct GenerationView: View {
                 VStack(spacing: 20) {
                     VStack(spacing: 7) {
                         BrandMark(size: 54)
-                        Text(appModel.isGenerating ? "Creating your video" : "Generation complete")
+                        Text(generationTitle)
                             .font(.title2.bold())
-                        Text(appModel.isGenerating ? "The pipeline is working through each production stage." : "Your preview is ready to review.")
+                        Text(generationSubtitle)
                             .font(.subheadline)
                             .foregroundStyle(Brand.muted)
                             .multilineTextAlignment(.center)
@@ -297,6 +297,20 @@ struct GenerationView: View {
             didStart = true
             await appModel.generate(request)
         }
+    }
+
+    private var generationTitle: String {
+        if appModel.isGenerating { return "Creating your video" }
+        if appModel.errorMessage != nil { return "Generation stopped" }
+        if appModel.currentProject != nil { return "Generation complete" }
+        return "Ready to generate"
+    }
+
+    private var generationSubtitle: String {
+        if appModel.isGenerating { return "The pipeline is working through each production stage." }
+        if appModel.errorMessage != nil { return "The pipeline stopped before a video was completed." }
+        if appModel.currentProject != nil { return "Your preview is ready to review." }
+        return "Waiting for a source to begin generation."
     }
 }
 

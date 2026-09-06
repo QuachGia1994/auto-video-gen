@@ -60,6 +60,7 @@ function extractContent(result: WorkersAIResult | string) {
   if (typeof result === "string" && result.trim()) return result.trim();
   if (typeof result !== "object" || result === null) return null;
   if (typeof result.response === "string" && result.response.trim()) return result.response.trim();
+  if (typeof result.response === "object" && result.response !== null) return JSON.stringify(result.response);
   const content = result.choices?.[0]?.message?.content;
   return typeof content === "string" && content.trim() ? content.trim() : null;
 }
@@ -88,6 +89,7 @@ async function chatCompletion(request: Request, env: ScriptLLMWorkerEnv) {
   const input: Record<string, unknown> = {
     messages,
     chat_template_kwargs: { enable_thinking: false },
+    response_format: { type: "json_object" },
   };
   const temperature = optionalNumber(body.temperature, 0, 2);
   const maxTokens = optionalNumber(body.max_tokens, 1, 8_192);
