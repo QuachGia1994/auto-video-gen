@@ -7,11 +7,20 @@ enum SourceKind: String, CaseIterable, Identifiable, Sendable {
     case markdown = "Markdown"
 
     var id: Self { self }
-    var placeholder: String {
+
+    var labelKey: String {
         switch self {
-        case .url: "https://example.com/article"
-        case .text: "Paste an article, idea, or script"
-        case .markdown: "Paste Markdown content"
+        case .url: "source.url"
+        case .text: "source.text"
+        case .markdown: "source.markdown"
+        }
+    }
+
+    var placeholderKey: String {
+        switch self {
+        case .url: "create.placeholderUrl"
+        case .text: "create.placeholderText"
+        case .markdown: "create.placeholderMarkdown"
         }
     }
 }
@@ -20,6 +29,14 @@ enum ProjectStatus: String, Sendable {
     case draft = "Draft"
     case processing = "Processing"
     case completed = "Completed"
+
+    var labelKey: String {
+        switch self {
+        case .draft: "status.draft"
+        case .processing: "status.processing"
+        case .completed: "status.completed"
+        }
+    }
 }
 
 struct GenerationRequest: Sendable {
@@ -41,16 +58,19 @@ struct VideoProject: Identifiable, Hashable, Sendable {
 
 struct PipelineStep: Identifiable, Hashable, Sendable {
     let id: String
-    let title: String
-    let detail: String
     var progress: Double
 
+    var titleKey: String { "step.\(camelID)Title" }
+    var detailKey: String { "step.\(camelID)Detail" }
+
+    private var camelID: String { id == "audio" ? "audioMix" : id }
+
     static let defaults: [PipelineStep] = [
-        .init(id: "script", title: "Script", detail: "Writing the short-form narrative", progress: 0),
-        .init(id: "voice", title: "Voice", detail: "Generating natural narration", progress: 0),
-        .init(id: "motion", title: "Motion", detail: "Building vertical motion scenes", progress: 0),
-        .init(id: "audio", title: "Audio Mix", detail: "Balancing voice, music, and SFX", progress: 0),
-        .init(id: "render", title: "Render", detail: "Exporting the 9:16 MP4", progress: 0)
+        .init(id: "script", progress: 0),
+        .init(id: "voice", progress: 0),
+        .init(id: "motion", progress: 0),
+        .init(id: "audio", progress: 0),
+        .init(id: "render", progress: 0)
     ]
 }
 

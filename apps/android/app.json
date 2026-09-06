@@ -6,7 +6,7 @@
     "platforms": ["android"],
     "orientation": "portrait",
     "scheme": "autovideogen",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "automatic",
     "icon": "./assets/icon.png",
     "android": {
       "package": "com.autovideogen.mobile.android",

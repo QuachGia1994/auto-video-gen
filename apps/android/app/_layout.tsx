@@ -1,26 +1,45 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { StatusBar } from 'react-native';
 import { Stack } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { GenerationProvider } from '../lib/generation';
-import { colors } from '../lib/theme';
+import { ThemeProvider, useTheme } from '../lib/theme-provider';
+import { loadPersistedLanguage } from '../lib/i18n';
 
-export default function RootLayout() {
+function ThemedStack() {
+  const { colors, scheme } = useTheme();
+  const { t } = useTranslation();
+
   return (
-    <GenerationProvider>
-      <StatusBar barStyle="light-content" backgroundColor={colors.background} />
+    <>
+      <StatusBar barStyle={scheme === 'light' ? 'dark-content' : 'light-content'} backgroundColor={colors.bg} />
       <Stack
         screenOptions={{
-          headerStyle: { backgroundColor: colors.background },
-          headerTintColor: colors.text,
+          headerStyle: { backgroundColor: colors.bg },
+          headerTintColor: colors.textPrimary,
           headerShadowVisible: false,
-          contentStyle: { backgroundColor: colors.background },
+          contentStyle: { backgroundColor: colors.bg },
           animation: 'slide_from_right',
         }}
       >
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="generate" options={{ title: 'Pipeline' }} />
-        <Stack.Screen name="preview" options={{ title: 'Preview' }} />
+        <Stack.Screen name="generate" options={{ title: t('nav.pipeline') }} />
+        <Stack.Screen name="preview" options={{ title: t('nav.preview') }} />
       </Stack>
-    </GenerationProvider>
+    </>
+  );
+}
+
+export default function RootLayout() {
+  useEffect(() => {
+    void loadPersistedLanguage();
+  }, []);
+
+  return (
+    <ThemeProvider>
+      <GenerationProvider>
+        <ThemedStack />
+      </GenerationProvider>
+    </ThemeProvider>
   );
 }

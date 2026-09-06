@@ -1,51 +1,33 @@
 import React from 'react';
-import { Text, type ColorValue } from 'react-native';
-import { Tabs } from 'expo-router';
-import { colors } from '../../lib/theme';
+import { NativeTabs } from 'expo-router/unstable-native-tabs';
+import { useTranslation } from 'react-i18next';
+import { useTheme } from '../../lib/theme-provider';
 
-function TabGlyph({ glyph, color }: { glyph: string; color: ColorValue }) {
-  return <Text style={{ color, fontSize: 19, fontWeight: '800' }}>{glyph}</Text>;
-}
-
+// Native system bottom tabs (Material bottom navigation on Android, Liquid Glass on iOS 26+).
+// Icons use Android Material Symbols via `md`; app is Android-only so SF Symbols are omitted.
 export default function TabLayout() {
+  const { colors } = useTheme();
+  const { t } = useTranslation();
+
   return (
-    <Tabs
-      screenOptions={{
-        headerStyle: { backgroundColor: colors.background },
-        headerTintColor: colors.text,
-        headerShadowVisible: false,
-        sceneStyle: { backgroundColor: colors.background },
-        tabBarStyle: {
-          backgroundColor: '#0D1420',
-          borderTopColor: colors.surfaceStrong,
-        },
-        tabBarActiveTintColor: colors.cyan,
-        tabBarInactiveTintColor: colors.muted,
-      }}
+    <NativeTabs
+      backgroundColor={colors.tabBar}
+      iconColor={{ default: colors.textFaint, selected: colors.accentAlt }}
+      indicatorColor={colors.accent}
+      labelStyle={{ default: { color: colors.textFaint }, selected: { color: colors.accentAlt } }}
     >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Create',
-          headerTitle: 'Create',
-          tabBarIcon: ({ color }) => <TabGlyph glyph="✦" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="library"
-        options={{
-          title: 'Library',
-          headerTitle: 'My Videos',
-          tabBarIcon: ({ color }) => <TabGlyph glyph="▣" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="settings"
-        options={{
-          title: 'Settings',
-          tabBarIcon: ({ color }) => <TabGlyph glyph="⚙" color={color} />,
-        }}
-      />
-    </Tabs>
+      <NativeTabs.Trigger name="index">
+        <NativeTabs.Trigger.Icon md="auto_awesome" />
+        <NativeTabs.Trigger.Label>{t('nav.create')}</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="library">
+        <NativeTabs.Trigger.Icon md="video_library" />
+        <NativeTabs.Trigger.Label>{t('nav.library')}</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="settings">
+        <NativeTabs.Trigger.Icon md="settings" />
+        <NativeTabs.Trigger.Label>{t('nav.settings')}</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
+    </NativeTabs>
   );
 }

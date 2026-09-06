@@ -12,16 +12,18 @@ struct SurfaceCard<Content: View>: View {
         content
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Brand.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .background(Brand.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(Brand.border, lineWidth: 1)
             }
+            .shadow(color: Brand.primary.opacity(0.10), radius: 18, y: 10)
     }
 }
 
 struct HomeView: View {
     @Environment(AppModel.self) private var appModel
+    @Environment(Localizer.self) private var loc
     @State private var sourceKind = SourceKind.url
     @State private var content = ""
 
@@ -42,17 +44,17 @@ struct HomeView: View {
                 .padding(.bottom, 28)
             }
         }
-        .navigationTitle("Create")
+        .navigationTitle(loc.t("nav.create"))
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
-                    Button("News article", systemImage: "newspaper") { sourceKind = .url }
-                    Button("Plain text", systemImage: "text.alignleft") { sourceKind = .text }
-                    Button("Markdown", systemImage: "doc.text") { sourceKind = .markdown }
+                    Button(loc.t("create.menuNews"), systemImage: "newspaper") { sourceKind = .url }
+                    Button(loc.t("create.menuPlain"), systemImage: "text.alignleft") { sourceKind = .text }
+                    Button(loc.t("create.menuMarkdown"), systemImage: "doc.text") { sourceKind = .markdown }
                 } label: {
                     Image(systemName: "plus")
                 }
-                .accessibilityLabel("Choose source")
+                .accessibilityLabel(loc.t("create.chooseSource"))
             }
         }
     }
@@ -64,16 +66,16 @@ struct HomeView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Auto Video Gen")
                         .font(.headline)
-                    Text("AI short-video studio")
+                    Text(loc.t("app.tagline"))
                         .font(.caption)
                         .foregroundStyle(Brand.muted)
                 }
             }
 
-            Text("Paste anything.\nTurn it into a video.")
+            Text(loc.t("create.heroTitle"))
                 .font(.system(size: 34, weight: .bold, design: .rounded))
                 .tracking(-0.7)
-            Text("Start from an article, GitHub repo, text, or Markdown. The pipeline writes, voices, animates, mixes, and renders a vertical short.")
+            Text(loc.t("create.heroBody"))
                 .font(.subheadline)
                 .foregroundStyle(Brand.muted)
                 .fixedSize(horizontal: false, vertical: true)
@@ -85,26 +87,30 @@ struct HomeView: View {
     private var createCard: some View {
         SurfaceCard {
             VStack(alignment: .leading, spacing: 16) {
-                Picker("Source", selection: $sourceKind) {
+                Picker(loc.t("create.sourcePicker"), selection: $sourceKind) {
                     ForEach(SourceKind.allCases) { kind in
-                        Text(kind.rawValue).tag(kind)
+                        Text(loc.t(kind.labelKey)).tag(kind)
                     }
                 }
                 .pickerStyle(.segmented)
 
-                TextField(sourceKind.placeholder, text: $content, axis: .vertical)
+                TextField(loc.t(sourceKind.placeholderKey), text: $content, axis: .vertical)
                     .lineLimit(sourceKind == .url ? 1...2 : 4...8)
                     .textInputAutocapitalization(sourceKind == .url ? .never : .sentences)
                     .autocorrectionDisabled(sourceKind == .url)
                     .padding(14)
-                    .background(Color.black.opacity(0.28), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .background(Brand.background.opacity(0.5), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(Brand.border, lineWidth: 1)
+                    }
 
                 NavigationLink {
                     GenerationView(request: request)
                 } label: {
                     HStack {
                         Image(systemName: "sparkles")
-                        Text("Generate Video")
+                        Text(loc.t("create.ctaGenerate"))
                             .fontWeight(.semibold)
                         Spacer()
                         Image(systemName: "arrow.right")
@@ -113,6 +119,7 @@ struct HomeView: View {
                     .padding(.horizontal, 16)
                     .frame(height: 52)
                     .background(Brand.gradient, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                    .shadow(color: Brand.primary.opacity(0.45), radius: 14, y: 8)
                 }
                 .buttonStyle(.plain)
                 .disabled(content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -124,10 +131,10 @@ struct HomeView: View {
     private var recentProjects: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Recent Projects")
+                Text(loc.t("create.recentProjects"))
                     .font(.title3.bold())
                 Spacer()
-                NavigationLink("See all") {
+                NavigationLink(loc.t("create.seeAll")) {
                     LibraryView()
                 }
                 .font(.subheadline)
@@ -136,9 +143,9 @@ struct HomeView: View {
             if appModel.projects.isEmpty {
                 SurfaceCard {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("No videos yet")
+                        Text(loc.t("create.emptyTitle"))
                             .font(.headline)
-                        Text("Paste a source above to create your first rendered short.")
+                        Text(loc.t("create.emptyBody"))
                             .font(.subheadline)
                             .foregroundStyle(Brand.muted)
                     }
@@ -157,14 +164,37 @@ struct HomeView: View {
     }
 }
 
+struct StatusPill: View {
+    @Environment(Localizer.self) private var loc
+    let status: ProjectStatus
+
+    private var tone: Color {
+        switch status {
+        case .draft: Brand.faint
+        case .processing: Brand.cyan
+        case .completed: Brand.success
+        }
+    }
+
+    var body: some View {
+        Text(loc.t(status.labelKey))
+            .font(.caption2.bold())
+            .padding(.horizontal, 9)
+            .padding(.vertical, 3)
+            .background(tone.opacity(0.16), in: Capsule())
+            .foregroundStyle(tone)
+    }
+}
+
 struct ProjectRow: View {
+    @Environment(Localizer.self) private var loc
     let project: VideoProject
 
     var body: some View {
         SurfaceCard {
             HStack(spacing: 14) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
                         .fill(Brand.gradient)
                     Image(systemName: "play.fill")
                         .font(.title3.bold())
@@ -177,19 +207,17 @@ struct ProjectRow: View {
                         .font(.headline)
                         .lineLimit(2)
                     HStack(spacing: 8) {
-                        Label(project.duration ?? "Rendered", systemImage: "clock")
+                        Label(project.duration ?? loc.t("common.rendered"), systemImage: "clock")
                         Text("•")
                         Text(project.createdAt, style: .relative)
                     }
                     .font(.caption)
                     .foregroundStyle(Brand.muted)
-                    Text(project.status.rawValue)
-                        .font(.caption2.bold())
-                        .foregroundStyle(Brand.success)
+                    StatusPill(status: project.status)
                 }
                 Spacer()
                 Image(systemName: "chevron.right")
-                    .foregroundStyle(Brand.muted)
+                    .foregroundStyle(Brand.faint)
             }
         }
     }
@@ -197,6 +225,7 @@ struct ProjectRow: View {
 
 struct GenerationView: View {
     @Environment(AppModel.self) private var appModel
+    @Environment(Localizer.self) private var loc
     let request: GenerationRequest
     @State private var didStart = false
 
@@ -236,14 +265,14 @@ struct GenerationView: View {
 
                                     VStack(alignment: .leading, spacing: 7) {
                                         HStack {
-                                            Text(step.title)
+                                            Text(loc.t(step.titleKey))
                                                 .font(.subheadline.bold())
                                             Spacer()
                                             Text(step.progress, format: .percent.precision(.fractionLength(0)))
                                                 .font(.caption.monospacedDigit())
                                                 .foregroundStyle(Brand.muted)
                                         }
-                                        Text(step.detail)
+                                        Text(loc.t(step.detailKey))
                                             .font(.caption)
                                             .foregroundStyle(Brand.muted)
                                         ProgressView(value: step.progress)
@@ -257,13 +286,13 @@ struct GenerationView: View {
                     if let errorMessage = appModel.errorMessage {
                         SurfaceCard {
                             VStack(alignment: .leading, spacing: 12) {
-                                Label("Generation stopped", systemImage: "exclamationmark.triangle")
+                                Label(loc.t("generate.stopped"), systemImage: "exclamationmark.triangle")
                                     .font(.headline)
-                                    .foregroundStyle(.red)
+                                    .foregroundStyle(Brand.danger)
                                 Text(errorMessage)
                                     .font(.subheadline)
                                     .foregroundStyle(Brand.muted)
-                                Button("Try Again") {
+                                Button(loc.t("generate.tryAgain")) {
                                     Task { await appModel.generate(request) }
                                 }
                                 .buttonStyle(.borderedProminent)
@@ -276,12 +305,13 @@ struct GenerationView: View {
                         NavigationLink {
                             PreviewView(project: project)
                         } label: {
-                            Label("Review Video", systemImage: "play.rectangle.fill")
+                            Label(loc.t("generate.reviewVideo"), systemImage: "play.rectangle.fill")
                                 .fontWeight(.semibold)
                                 .frame(maxWidth: .infinity)
                                 .frame(height: 52)
                                 .foregroundStyle(.white)
                                 .background(Brand.gradient, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                                .shadow(color: Brand.primary.opacity(0.45), radius: 14, y: 8)
                         }
                         .buttonStyle(.plain)
                     }
@@ -290,7 +320,7 @@ struct GenerationView: View {
                 .padding(.bottom, 28)
             }
         }
-        .navigationTitle("Pipeline")
+        .navigationTitle(loc.t("nav.pipeline"))
         .navigationBarTitleDisplayMode(.inline)
         .task {
             guard !didStart else { return }
@@ -299,23 +329,26 @@ struct GenerationView: View {
         }
     }
 
+    // Derive the header from actual state, not just isGenerating, so a failed
+    // run never renders "Generation complete" (restores fix from commit d96d5d7).
     private var generationTitle: String {
-        if appModel.isGenerating { return "Creating your video" }
-        if appModel.errorMessage != nil { return "Generation stopped" }
-        if appModel.currentProject != nil { return "Generation complete" }
-        return "Ready to generate"
+        if appModel.isGenerating { return loc.t("generate.creatingTitle") }
+        if appModel.errorMessage != nil { return loc.t("generate.stopped") }
+        if appModel.currentProject != nil { return loc.t("generate.completeTitle") }
+        return loc.t("generate.readyTitle")
     }
 
     private var generationSubtitle: String {
-        if appModel.isGenerating { return "The pipeline is working through each production stage." }
-        if appModel.errorMessage != nil { return "The pipeline stopped before a video was completed." }
-        if appModel.currentProject != nil { return "Your preview is ready to review." }
-        return "Waiting for a source to begin generation."
+        if appModel.isGenerating { return loc.t("generate.creatingSubtitle") }
+        if appModel.errorMessage != nil { return loc.t("generate.stoppedSubtitle") }
+        if appModel.currentProject != nil { return loc.t("generate.completeSubtitle") }
+        return loc.t("generate.readySubtitle")
     }
 }
 
 struct PreviewView: View {
     @Environment(\.openURL) private var openURL
+    @Environment(Localizer.self) private var loc
     let project: VideoProject
     @State private var showBackendNotice = false
 
@@ -334,19 +367,20 @@ struct PreviewView: View {
                             showBackendNotice = true
                         }
                     } label: {
-                        Label("Export MP4", systemImage: "square.and.arrow.up")
+                        Label(loc.t("preview.exportMp4"), systemImage: "square.and.arrow.up")
                             .fontWeight(.semibold)
                             .frame(maxWidth: .infinity)
                             .frame(height: 52)
                             .foregroundStyle(.white)
                             .background(Brand.gradient, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                            .shadow(color: Brand.primary.opacity(0.45), radius: 14, y: 8)
                     }
                 }
                 .padding(.horizontal, 18)
                 .padding(.bottom, 30)
             }
         }
-        .navigationTitle("Preview")
+        .navigationTitle(loc.t("nav.preview"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if let videoURL = project.videoURL {
@@ -357,10 +391,10 @@ struct PreviewView: View {
                 }
             }
         }
-        .alert("Video unavailable", isPresented: $showBackendNotice) {
+        .alert(loc.t("preview.unavailableTitle"), isPresented: $showBackendNotice) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text("This project does not have a rendered MP4 URL.")
+            Text(loc.t("preview.unavailableBody"))
         }
     }
 
@@ -378,12 +412,13 @@ struct PreviewView: View {
                 Spacer()
                 Image(systemName: "sparkles")
                     .font(.largeTitle)
-                    .foregroundStyle(Brand.cyan)
+                    .foregroundStyle(.white)
                 Text(project.title.uppercased())
                     .font(.system(size: 30, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 20)
-                Text("A BRIGHTER STORY IN 60 SECONDS")
+                Text(loc.t("preview.mockupTagline"))
                     .font(.caption.bold())
                     .tracking(1.3)
                     .foregroundStyle(.white.opacity(0.72))
@@ -391,7 +426,8 @@ struct PreviewView: View {
                 Image(systemName: "play.circle.fill")
                     .font(.system(size: 58))
                     .symbolRenderingMode(.hierarchical)
-                Text(project.duration.map { "0:00 / \($0)" } ?? "Rendered MP4")
+                    .foregroundStyle(.white)
+                Text(project.duration.map { "0:00 / \($0)" } ?? loc.t("preview.renderedMp4"))
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.white.opacity(0.72))
                     .padding(.bottom, 20)
@@ -399,13 +435,13 @@ struct PreviewView: View {
         }
         .frame(maxWidth: 320)
         .aspectRatio(9 / 16, contentMode: .fit)
-        .shadow(color: Brand.primary.opacity(0.22), radius: 34, y: 18)
-        .accessibilityLabel("Video preview mockup for \(project.title)")
+        .shadow(color: Brand.primary.opacity(0.3), radius: 34, y: 18)
+        .accessibilityLabel("\(loc.t("nav.preview")): \(project.title)")
     }
 
     private var sceneStrip: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Scenes")
+            Text(loc.t("preview.scenes"))
                 .font(.headline)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 10) {
@@ -414,22 +450,32 @@ struct PreviewView: View {
                             Text(String(format: "%02d", index + 1))
                                 .font(.caption2.monospacedDigit())
                                 .foregroundStyle(Brand.cyan)
-                            Text(index == 0 ? "Hook" : index == project.sceneCount - 1 ? "Outro" : "Key point")
+                            Text(sceneLabel(index))
                                 .font(.caption.bold())
                         }
                         .frame(width: 92, alignment: .leading)
                         .padding(12)
                         .background(Brand.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .stroke(Brand.border, lineWidth: 1)
+                        }
                     }
                 }
             }
         }
     }
 
+    private func sceneLabel(_ index: Int) -> String {
+        if index == 0 { return loc.t("scene.hook") }
+        if index == project.sceneCount - 1 { return loc.t("scene.outro") }
+        return loc.t("scene.keyPoint")
+    }
+
     private var options: some View {
         HStack(spacing: 12) {
             SurfaceCard {
-                Label("Theme", systemImage: "paintpalette")
+                Label(loc.t("preview.theme"), systemImage: "paintpalette")
                     .font(.caption)
                     .foregroundStyle(Brand.muted)
                 Text(project.theme)
@@ -437,7 +483,7 @@ struct PreviewView: View {
                     .padding(.top, 6)
             }
             SurfaceCard {
-                Label("Voice", systemImage: "waveform")
+                Label(loc.t("preview.voice"), systemImage: "waveform")
                     .font(.caption)
                     .foregroundStyle(Brand.muted)
                 Text(project.voice)
@@ -451,15 +497,16 @@ struct PreviewView: View {
 
 struct LibraryView: View {
     @Environment(AppModel.self) private var appModel
+    @Environment(Localizer.self) private var loc
 
     var body: some View {
         ZStack {
             BrandBackground()
             if appModel.projects.isEmpty {
                 ContentUnavailableView(
-                    "No rendered videos",
+                    loc.t("library.emptyTitle"),
                     systemImage: "play.square.stack",
-                    description: Text("Create a video first. Completed renders will appear here.")
+                    description: Text(loc.t("library.emptyBody"))
                 )
             } else {
                 ScrollView {
@@ -478,49 +525,70 @@ struct LibraryView: View {
                 }
             }
         }
-        .navigationTitle("My Videos")
+        .navigationTitle(loc.t("nav.libraryHeader"))
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button("Select") {}
+                Button(loc.t("library.select")) {}
             }
         }
     }
 }
 
 struct SettingsView: View {
-    @State private var theme = "Dark Neon"
+    @Environment(Localizer.self) private var loc
+    @AppStorage("app_appearance") private var appearanceRaw = AppearanceMode.system.rawValue
+    @State private var videoTheme = "darkNeon"
     @State private var voice = "Edge TTS"
     @State private var autoplay = true
 
     var body: some View {
-        List {
-            Section("Default production") {
-                Picker("Theme", selection: $theme) {
-                    Text("Dark Neon").tag("Dark Neon")
-                    Text("Light Pro").tag("Light Pro")
+        @Bindable var loc = loc
+        return List {
+            Section(loc.t("settings.appearance")) {
+                Picker(loc.t("settings.appearance"), selection: $appearanceRaw) {
+                    ForEach(AppearanceMode.allCases) { mode in
+                        Text(loc.t(mode.labelKey)).tag(mode.rawValue)
+                    }
                 }
-                Picker("Voice", selection: $voice) {
+                .pickerStyle(.segmented)
+            }
+
+            Section(loc.t("settings.language")) {
+                Picker(loc.t("settings.language"), selection: $loc.language) {
+                    ForEach(AppLanguage.allCases) { lang in
+                        Text(lang.label).tag(lang)
+                    }
+                }
+                .pickerStyle(.inline)
+            }
+
+            Section(loc.t("settings.defaultProduction")) {
+                Picker(loc.t("settings.videoTheme"), selection: $videoTheme) {
+                    Text(loc.t("settings.themeDarkNeon")).tag("darkNeon")
+                    Text(loc.t("settings.themeLightPro")).tag("lightPro")
+                }
+                Picker(loc.t("settings.voice"), selection: $voice) {
                     Text("Edge TTS").tag("Edge TTS")
                     Text("LucyLab").tag("LucyLab")
                     Text("Vbee").tag("Vbee")
                     Text("ElevenLabs").tag("ElevenLabs")
                 }
-                Toggle("Autoplay previews", isOn: $autoplay)
+                Toggle(loc.t("settings.autoplay"), isOn: $autoplay)
             }
 
-            Section("Pipeline") {
-                LabeledContent("Format", value: "1080 × 1920")
-                LabeledContent("Frame rate", value: "60 FPS")
-                LabeledContent("Backend", value: BackendConfig.baseURL == nil ? "Not configured" : "Configured")
+            Section(loc.t("settings.pipeline")) {
+                LabeledContent(loc.t("settings.format"), value: "1080 × 1920")
+                LabeledContent(loc.t("settings.frameRate"), value: "60 FPS")
+                LabeledContent(loc.t("settings.backend"), value: BackendConfig.baseURL == nil ? loc.t("settings.notConfigured") : loc.t("settings.configured"))
             }
 
-            Section("About") {
+            Section(loc.t("settings.about")) {
                 HStack(spacing: 12) {
                     BrandMark(size: 42)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Auto Video Gen")
                             .font(.headline)
-                        Text("Frontend concept build")
+                        Text(loc.t("settings.aboutTagline"))
                             .font(.caption)
                             .foregroundStyle(Brand.muted)
                     }
@@ -529,6 +597,6 @@ struct SettingsView: View {
         }
         .scrollContentBackground(.hidden)
         .background(BrandBackground())
-        .navigationTitle("Settings")
+        .navigationTitle(loc.t("nav.settings"))
     }
 }

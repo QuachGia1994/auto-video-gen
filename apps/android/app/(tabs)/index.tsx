@@ -1,13 +1,26 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 import { BrandMark, PrimaryButton, ProjectRow, ScreenBackdrop, SurfaceCard } from '../../components/ui';
 import { type SourceKind, useGeneration } from '../../lib/generation';
-import { colors, radii } from '../../lib/theme';
+import { type Palette, radii } from '../../lib/theme';
+import { useTheme } from '../../lib/theme-provider';
 
 const sourceKinds: SourceKind[] = ['URL', 'Text', 'Markdown'];
+const sourceLabelKey: Record<SourceKind, string> = { URL: 'source.url', Text: 'source.text', Markdown: 'source.markdown' };
+const placeholderKey: Record<SourceKind, string> = {
+  URL: 'create.placeholderUrl',
+  Text: 'create.placeholderText',
+  Markdown: 'create.placeholderMarkdown',
+};
 
 export default function CreateScreen() {
+  const { t } = useTranslation();
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
+  const s = useMemo(() => makeStyles(colors), [colors]);
   const { projects, isGenerating, queueRequest } = useGeneration();
   const [sourceKind, setSourceKind] = useState<SourceKind>('URL');
   const [content, setContent] = useState('');
@@ -25,186 +38,202 @@ export default function CreateScreen() {
 
   return (
     <ScreenBackdrop>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <View style={styles.brandRow}>
+      <ScrollView contentContainerStyle={[s.content, { paddingTop: insets.top + 10 }]} keyboardShouldPersistTaps="handled">
+        <View style={s.brandRow}>
           <BrandMark size={46} />
           <View>
-            <Text style={styles.brandTitle}>Auto Video Gen</Text>
-            <Text style={styles.caption}>AI short-video studio</Text>
+            <Text style={s.brandTitle}>Auto Video Gen</Text>
+            <Text style={s.caption}>{t('app.tagline')}</Text>
           </View>
         </View>
 
-        <View style={styles.hero}>
-          <Text style={styles.heroTitle}>Paste anything.{`\n`}Turn it into a video.</Text>
-          <Text style={styles.heroBody}>Start from an article, GitHub repo, text, or Markdown. The pipeline writes, voices, animates, mixes, and renders a vertical short.</Text>
+        <View style={s.hero}>
+          <Text style={s.heroTitle}>{t('create.heroTitle')}</Text>
+          <Text style={s.heroBody}>{t('create.heroBody')}</Text>
         </View>
 
-        <SurfaceCard style={styles.createCard}>
-          <View style={styles.segmented}>
-            {sourceKinds.map((kind) => (
-              <Pressable
-                key={kind}
-                accessibilityRole="button"
-                accessibilityState={{ selected: sourceKind === kind }}
-                onPress={() => setSourceKind(kind)}
-                style={[styles.segment, sourceKind === kind && styles.segmentActive]}
-              >
-                <Text style={[styles.segmentText, sourceKind === kind && styles.segmentTextActive]}>{kind}</Text>
-              </Pressable>
-            ))}
+        <SurfaceCard style={s.createCard}>
+          <View style={s.segmented}>
+            {sourceKinds.map((kind) => {
+              const active = sourceKind === kind;
+              return (
+                <Pressable
+                  key={kind}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                  onPress={() => setSourceKind(kind)}
+                  style={[s.segment, active && s.segmentActive]}
+                >
+                  <Text style={[s.segmentText, active && s.segmentTextActive]}>{t(sourceLabelKey[kind])}</Text>
+                </Pressable>
+              );
+            })}
           </View>
 
           <TextInput
             value={content}
             onChangeText={setContent}
-            placeholder={sourceKind === 'URL' ? 'https://example.com/article' : sourceKind === 'Text' ? 'Paste an article, idea, or script' : 'Paste Markdown content'}
-            placeholderTextColor={colors.muted}
+            placeholder={t(placeholderKey[sourceKind])}
+            placeholderTextColor={colors.textFaint}
             autoCapitalize={sourceKind === 'URL' ? 'none' : 'sentences'}
             autoCorrect={sourceKind !== 'URL'}
             multiline={sourceKind !== 'URL'}
-            style={[styles.input, sourceKind !== 'URL' && styles.inputMultiline]}
+            style={[s.input, sourceKind !== 'URL' && s.inputMultiline]}
           />
 
           <PrimaryButton onPress={generate} disabled={!isGenerating && !isValid}>
-            <Text style={styles.primaryLabel}>{isGenerating ? 'View Generation Progress  →' : '✦  Generate Video  →'}</Text>
+            <Text style={s.primaryLabel}>
+              {isGenerating ? `${t('create.ctaViewProgress')}  →` : `✦  ${t('create.ctaGenerate')}  →`}
+            </Text>
           </PrimaryButton>
         </SurfaceCard>
 
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Recent Projects</Text>
+        <View style={s.sectionHeader}>
+          <Text style={s.sectionTitle}>{t('create.recentProjects')}</Text>
           <Pressable onPress={() => router.push('/library')}>
-            <Text style={styles.link}>See all</Text>
+            <Text style={s.link}>{t('create.seeAll')}</Text>
           </Pressable>
         </View>
 
-        <View style={styles.projectList}>
+        <View style={s.projectList}>
           {projects.length === 0 ? (
             <SurfaceCard>
-              <Text style={styles.emptyTitle}>No videos yet</Text>
-              <Text style={styles.emptyBody}>Paste a source above to create your first rendered short.</Text>
+              <Text style={s.emptyTitle}>{t('create.emptyTitle')}</Text>
+              <Text style={s.emptyBody}>{t('create.emptyBody')}</Text>
             </SurfaceCard>
-          ) : projects.slice(0, 2).map((project) => (
-            <Pressable key={project.id} onPress={() => router.push({ pathname: '/preview', params: { projectId: project.id } })}>
-              <ProjectRow project={project} />
-            </Pressable>
-          ))}
+          ) : (
+            projects.slice(0, 2).map((project) => (
+              <Pressable key={project.id} onPress={() => router.push({ pathname: '/preview', params: { projectId: project.id } })}>
+                <ProjectRow project={project} />
+              </Pressable>
+            ))
+          )}
         </View>
       </ScrollView>
     </ScreenBackdrop>
   );
 }
 
-const styles = StyleSheet.create({
-  content: {
-    paddingHorizontal: 18,
-    paddingTop: 14,
-    paddingBottom: 34,
-    gap: 22,
-  },
-  brandRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  brandTitle: {
-    color: colors.text,
-    fontSize: 17,
-    fontWeight: '800',
-  },
-  caption: {
-    color: colors.muted,
-    fontSize: 12,
-    marginTop: 2,
-  },
-  hero: {
-    gap: 12,
-  },
-  heroTitle: {
-    color: colors.text,
-    fontSize: 34,
-    lineHeight: 39,
-    fontWeight: '900',
-    letterSpacing: -0.7,
-  },
-  heroBody: {
-    color: colors.muted,
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  createCard: {
-    gap: 16,
-  },
-  segmented: {
-    flexDirection: 'row',
-    borderRadius: radii.small,
-    padding: 3,
-    backgroundColor: '#080D16',
-  },
-  segment: {
-    flex: 1,
-    minHeight: 38,
-    borderRadius: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  segmentActive: {
-    backgroundColor: colors.primary,
-  },
-  segmentText: {
-    color: colors.muted,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  segmentTextActive: {
-    color: colors.text,
-  },
-  input: {
-    minHeight: 50,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: radii.small,
-    backgroundColor: '#080D16',
-    borderWidth: 1,
-    borderColor: colors.surfaceStrong,
-    color: colors.text,
-    fontSize: 15,
-  },
-  inputMultiline: {
-    minHeight: 130,
-    textAlignVertical: 'top',
-  },
-  primaryLabel: {
-    color: colors.text,
-    fontWeight: '800',
-    fontSize: 15,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  sectionTitle: {
-    color: colors.text,
-    fontWeight: '800',
-    fontSize: 19,
-  },
-  link: {
-    color: colors.cyan,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  projectList: {
-    gap: 12,
-  },
-  emptyTitle: {
-    color: colors.text,
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  emptyBody: {
-    color: colors.muted,
-    fontSize: 13,
-    lineHeight: 19,
-    marginTop: 5,
-  },
-});
+function makeStyles(c: Palette) {
+  return StyleSheet.create({
+    content: {
+      paddingHorizontal: 18,
+      paddingTop: 14,
+      paddingBottom: 34,
+      gap: 22,
+    },
+    brandRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+    },
+    brandTitle: {
+      color: c.textPrimary,
+      fontSize: 17,
+      fontWeight: '800',
+    },
+    caption: {
+      color: c.textSecondary,
+      fontSize: 12,
+      marginTop: 2,
+    },
+    hero: {
+      gap: 12,
+    },
+    heroTitle: {
+      color: c.textPrimary,
+      fontSize: 34,
+      lineHeight: 39,
+      fontWeight: '900',
+      letterSpacing: -0.7,
+    },
+    heroBody: {
+      color: c.textSecondary,
+      fontSize: 15,
+      lineHeight: 22,
+    },
+    createCard: {
+      gap: 16,
+    },
+    segmented: {
+      flexDirection: 'row',
+      borderRadius: radii.control,
+      padding: 4,
+      backgroundColor: c.inputBg,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    segment: {
+      flex: 1,
+      minHeight: 38,
+      borderRadius: radii.small,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    segmentActive: {
+      backgroundColor: c.accent,
+      shadowColor: c.accent,
+      shadowOpacity: 0.4,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 3 },
+      elevation: 3,
+    },
+    segmentText: {
+      color: c.textSecondary,
+      fontSize: 13,
+      fontWeight: '700',
+    },
+    segmentTextActive: {
+      color: '#FFFFFF',
+    },
+    input: {
+      minHeight: 50,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      borderRadius: radii.small,
+      backgroundColor: c.inputBg,
+      borderWidth: 1,
+      borderColor: c.border,
+      color: c.textPrimary,
+      fontSize: 15,
+    },
+    inputMultiline: {
+      minHeight: 130,
+      textAlignVertical: 'top',
+    },
+    primaryLabel: {
+      color: c.onAccent,
+      fontWeight: '800',
+      fontSize: 15,
+    },
+    sectionHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    sectionTitle: {
+      color: c.textPrimary,
+      fontWeight: '800',
+      fontSize: 19,
+    },
+    link: {
+      color: c.accentAlt,
+      fontSize: 13,
+      fontWeight: '700',
+    },
+    projectList: {
+      gap: 12,
+    },
+    emptyTitle: {
+      color: c.textPrimary,
+      fontSize: 15,
+      fontWeight: '800',
+    },
+    emptyBody: {
+      color: c.textSecondary,
+      fontSize: 13,
+      lineHeight: 19,
+      marginTop: 5,
+    },
+  });
+}

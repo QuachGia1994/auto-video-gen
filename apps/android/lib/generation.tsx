@@ -23,11 +23,20 @@ export type VideoProject = {
   videoUrl?: string;
 };
 
+export type StepId = 'script' | 'voice' | 'motion' | 'audio' | 'render';
+
 export type PipelineStep = {
-  id: 'script' | 'voice' | 'motion' | 'audio' | 'render';
-  title: string;
-  detail: string;
+  id: StepId;
   progress: number;
+};
+
+// Maps a pipeline step to its i18n keys (rendered in generate.tsx).
+export const STEP_KEYS: Record<StepId, { titleKey: string; detailKey: string }> = {
+  script: { titleKey: 'step.scriptTitle', detailKey: 'step.scriptDetail' },
+  voice: { titleKey: 'step.voiceTitle', detailKey: 'step.voiceDetail' },
+  motion: { titleKey: 'step.motionTitle', detailKey: 'step.motionDetail' },
+  audio: { titleKey: 'step.audioMixTitle', detailKey: 'step.audioMixDetail' },
+  render: { titleKey: 'step.renderTitle', detailKey: 'step.renderDetail' },
 };
 
 export type GenerationEvent =
@@ -39,11 +48,11 @@ export interface GenerationGateway {
 }
 
 const defaultSteps = (): PipelineStep[] => [
-  { id: 'script', title: 'Script', detail: 'Writing the short-form narrative', progress: 0 },
-  { id: 'voice', title: 'Voice', detail: 'Generating natural narration', progress: 0 },
-  { id: 'motion', title: 'Motion', detail: 'Building vertical motion scenes', progress: 0 },
-  { id: 'audio', title: 'Audio Mix', detail: 'Balancing voice, music, and SFX', progress: 0 },
-  { id: 'render', title: 'Render', detail: 'Exporting the 9:16 MP4', progress: 0 },
+  { id: 'script', progress: 0 },
+  { id: 'voice', progress: 0 },
+  { id: 'motion', progress: 0 },
+  { id: 'audio', progress: 0 },
+  { id: 'render', progress: 0 },
 ];
 
 type GenerationContextValue = {
