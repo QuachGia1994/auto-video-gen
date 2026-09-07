@@ -189,7 +189,7 @@ final class RenderLiveActivityController {
             failed: failed
         )
         let dismissalPolicy: ActivityUIDismissalPolicy = failed
-            ? .default
+            ? .immediate
             : .after(.now.addingTimeInterval(15 * 60))
         await Self.endActivity(jobID: jobID, state: state, dismissalPolicy: dismissalPolicy)
         tokenObservers[jobID]?.cancel()

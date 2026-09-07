@@ -67,6 +67,7 @@ describe("buildLiveActivityPushPayload", () => {
     expect(payload.aps.event).toBe("end");
     expect(payload.aps.alert).toBeUndefined();
     expect(typeof payload.aps["dismissal-date"]).toBe("number");
+    expect(payload.aps["dismissal-date"]).toBeGreaterThan(payload.aps.timestamp);
   });
 
   it("ends silently even on a failed terminal state", () => {
@@ -78,6 +79,6 @@ describe("buildLiveActivityPushPayload", () => {
     expect(payload.aps.event).toBe("end");
     expect(payload.aps.alert).toBeUndefined();
     expect(payload.aps["stale-date"]).toBeUndefined();
-    expect(typeof payload.aps["dismissal-date"]).toBe("number");
+    expect(payload.aps["dismissal-date"]).toBe(payload.aps.timestamp);
   });
 });

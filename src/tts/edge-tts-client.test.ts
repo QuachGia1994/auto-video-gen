@@ -102,6 +102,7 @@ describe("EdgeTtsClient", () => {
 
     const client = new EdgeTtsClient({
       voice: "vi-VN-HoaiMyNeural",
+      retryDelaysMs: [0, 0, 0, 0, 0],
     });
 
     const audioOut = join(tmpDir, "retry.mp3");
@@ -109,5 +110,22 @@ describe("EdgeTtsClient", () => {
 
     expect(callCount).toBe(2);
     expect(existsSync(audioOut)).toBe(true);
+  });
+
+  it("uses all resilient attempts before surfacing an Edge no-audio outage", async () => {
+    let callCount = 0;
+    mockSynthesizeImpl = vi.fn().mockImplementation(async () => {
+      callCount++;
+      throw new Error("No audio was received.");
+    });
+
+    const client = new EdgeTtsClient({
+      voice: "vi-VN-HoaiMyNeural",
+      retryDelaysMs: [0, 0, 0, 0, 0],
+    });
+
+    await expect(client.generate("Outage test", join(tmpDir, "outage.mp3")))
+      .rejects.toThrow("Edge TTS unavailable after 6 attempts: No audio was received.");
+    expect(callCount).toBe(6);
   });
 });

@@ -7,6 +7,7 @@ export interface EdgeTtsOpts {
   rate?: string;         // e.g. "+0%", "+10%", "-5%"
   pitch?: string;        // e.g. "+0Hz"
   volume?: string;       // e.g. "+0%"
+  retryDelaysMs?: number[]; // test seam; production uses the resilient defaults below
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -29,10 +30,13 @@ export class EdgeTtsClient implements TtsClient {
     audioOutPath: string,
     srtOutPath?: string,
   ): Promise<void> {
-    const delays = [1000, 2000, 4000];
+    // Edge's free WebSocket service intermittently returns "No audio was received"
+    // even for valid text/voices. Keep the same scene/voice and retry long enough
+    // to ride out a short provider-side/IP throttle instead of failing the whole job.
+    const delays = this.cfg.retryDelaysMs ?? [1500, 3000, 6000, 12000, 24000];
     let lastErr: unknown;
 
-    for (let attempt = 0; attempt < 4; attempt++) {
+    for (let attempt = 0; attempt <= delays.length; attempt++) {
       try {
         const tts = new EdgeTTS(text, this.cfg.voice, {
           rate: this.cfg.rate ?? "+0%",
@@ -54,8 +58,11 @@ export class EdgeTtsClient implements TtsClient {
         return;
       } catch (e) {
         lastErr = e;
-        if (attempt === delays.length) throw e;
-        await sleep(delays[attempt]);
+        if (attempt === delays.length) {
+          const detail = e instanceof Error ? e.message : String(e);
+          throw new Error(`Edge TTS unavailable after ${attempt + 1} attempts: ${detail}`);
+        }
+        await sleep(delays[attempt]!);
       }
     }
     throw lastErr;

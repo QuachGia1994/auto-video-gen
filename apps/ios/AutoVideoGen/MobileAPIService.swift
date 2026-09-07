@@ -28,6 +28,7 @@ private struct RenderJobResponse: Decodable, Sendable {
     let voice: String
     let status: String
     let progress: Progress?
+    let error: String?
     let videoUrl: String?
 }
 
@@ -116,7 +117,10 @@ struct MobileAPIVideoGenerationService: VideoGenerationService {
         while true {
             for event in progressEvents(job) { continuation.yield(event) }
             if job.status == "failed" {
-                throw MobileAPIError("error.renderFailed", isTerminal: true)
+                let messageKey = job.error?.localizedCaseInsensitiveContains("No audio was received") == true
+                    ? "error.ttsUnavailable"
+                    : "error.renderFailed"
+                throw MobileAPIError(messageKey, isTerminal: true)
             }
             if job.status == "completed" {
                 guard let videoPath = job.videoUrl,

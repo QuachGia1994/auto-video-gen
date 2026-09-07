@@ -22,6 +22,7 @@ All notable changes to this project are recorded here.
 - Localize iOS completion alerts, make APNs the Live Activity progress authority when enabled while keeping the same 8-step local fallback formula, remove the server-default theme magic string, make Preview playback affordances truthful and tappable, and retry transient status-poll failures without abandoning an active render.
 - Prevent push-triggered physical-device iOS artifacts from silently embedding a loopback backend URL; resolve the backend from a repository variable (or manual dispatch override) and fail CI on empty/loopback endpoints.
 - Make the on-device notification the single terminal-alert owner, add native in-app AVPlayer preview and file-based MP4 sharing/export, and serve MP4 byte ranges/HEAD metadata so native seeking and replay work without Safari.
+- Harden Edge TTS against intermittent no-audio outages with a longer bounded retry window, surface a localized voice-service error when retries are exhausted, and dismiss failed Live Activities immediately so retries do not stack stale 0% cards.
 
 ### Changed
 - Add optional progress callbacks to the existing Node/TypeScript pipeline while preserving its CLI inputs and generated artifacts.

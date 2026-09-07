@@ -122,7 +122,7 @@ export function buildLiveActivityPushPayload(
     // which is correct-locale by construction and does not depend on APNs
     // delivery. A remote alert here would double-notify or, worse, be the only
     // path and silently fail when APNs is misconfigured. See docs plan A.
-    aps["dismissal-date"] = now + 15 * 60;
+    aps["dismissal-date"] = state.failed ? now : now + 15 * 60;
   }
   return { aps };
 }
