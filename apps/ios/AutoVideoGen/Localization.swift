@@ -2,8 +2,8 @@ import Foundation
 import Observation
 import SwiftUI
 
-// Runtime in-app localization. Mirrors apps/android/lib/i18n/resources.ts (same keys).
-// Relative dates use SwiftUI's `.relative` style + the injected locale, so no time.* keys here.
+// Runtime in-app localization. Shared conceptually with apps/android/lib/i18n/resources.ts.
+// Date/time formatting uses SwiftUI format styles with the injected locale.
 
 enum AppLanguage: String, CaseIterable, Identifiable, Sendable {
     case vi, en, zh, ja, fr
@@ -95,7 +95,6 @@ enum Strings {
             "create.emptyBody": "Paste a source above to create your first rendered short.",
             "library.emptyTitle": "No rendered videos",
             "library.emptyBody": "Create a video first. Completed renders will appear here.",
-            "library.select": "Select",
             "settings.appearance": "Appearance",
             "settings.language": "Language",
             "settings.defaultProduction": "Default production",
@@ -132,6 +131,7 @@ enum Strings {
             "preview.unavailableTitle": "Video unavailable",
             "preview.unavailableBody": "This project does not have a rendered MP4 URL.",
             "preview.theme": "Theme",
+            "preview.serverDefault": "Server default",
             "preview.voice": "Voice",
             "scene.hook": "Hook",
             "scene.keyPoint": "Key point",
@@ -181,7 +181,6 @@ enum Strings {
             "create.emptyBody": "Dán nguồn ở trên để tạo video đầu tiên của bạn.",
             "library.emptyTitle": "Chưa có video nào",
             "library.emptyBody": "Hãy tạo video trước. Video hoàn tất sẽ hiện ở đây.",
-            "library.select": "Chọn",
             "settings.appearance": "Giao diện",
             "settings.language": "Ngôn ngữ",
             "settings.defaultProduction": "Thiết lập mặc định",
@@ -218,6 +217,7 @@ enum Strings {
             "preview.unavailableTitle": "Video không khả dụng",
             "preview.unavailableBody": "Dự án này chưa có đường dẫn MP4.",
             "preview.theme": "Chủ đề",
+            "preview.serverDefault": "Mặc định máy chủ",
             "preview.voice": "Giọng đọc",
             "scene.hook": "Mở đầu",
             "scene.keyPoint": "Ý chính",
@@ -267,7 +267,6 @@ enum Strings {
             "create.emptyBody": "在上方粘贴素材，创建你的第一个短视频。",
             "library.emptyTitle": "暂无已渲染的视频",
             "library.emptyBody": "请先创建视频。完成渲染后会显示在这里。",
-            "library.select": "选择",
             "settings.appearance": "外观",
             "settings.language": "语言",
             "settings.defaultProduction": "默认制作",
@@ -304,6 +303,7 @@ enum Strings {
             "preview.unavailableTitle": "视频不可用",
             "preview.unavailableBody": "此项目没有已渲染的 MP4 链接。",
             "preview.theme": "主题",
+            "preview.serverDefault": "服务器默认",
             "preview.voice": "配音",
             "scene.hook": "开场",
             "scene.keyPoint": "要点",
@@ -353,7 +353,6 @@ enum Strings {
             "create.emptyBody": "上にソースを貼り付けて最初のショート動画を作成しましょう。",
             "library.emptyTitle": "書き出した動画がありません",
             "library.emptyBody": "まず動画を作成してください。完成した動画がここに表示されます。",
-            "library.select": "選択",
             "settings.appearance": "外観",
             "settings.language": "言語",
             "settings.defaultProduction": "既定の制作設定",
@@ -390,6 +389,7 @@ enum Strings {
             "preview.unavailableTitle": "動画は利用できません",
             "preview.unavailableBody": "このプロジェクトには書き出し済みの MP4 URL がありません。",
             "preview.theme": "テーマ",
+            "preview.serverDefault": "サーバー既定",
             "preview.voice": "音声",
             "scene.hook": "フック",
             "scene.keyPoint": "要点",
@@ -439,7 +439,6 @@ enum Strings {
             "create.emptyBody": "Collez une source ci-dessus pour créer votre première vidéo.",
             "library.emptyTitle": "Aucune vidéo rendue",
             "library.emptyBody": "Créez d'abord une vidéo. Les rendus terminés apparaîtront ici.",
-            "library.select": "Sélectionner",
             "settings.appearance": "Apparence",
             "settings.language": "Langue",
             "settings.defaultProduction": "Production par défaut",
@@ -476,6 +475,7 @@ enum Strings {
             "preview.unavailableTitle": "Vidéo indisponible",
             "preview.unavailableBody": "Ce projet n'a pas d'URL MP4 rendue.",
             "preview.theme": "Thème",
+            "preview.serverDefault": "Valeur serveur par défaut",
             "preview.voice": "Voix",
             "scene.hook": "Accroche",
             "scene.keyPoint": "Point clé",

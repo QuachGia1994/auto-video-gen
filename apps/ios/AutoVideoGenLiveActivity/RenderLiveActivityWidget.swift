@@ -23,10 +23,6 @@ struct RenderLiveActivityWidget: Widget {
                         .font(.headline.monospacedDigit())
                 }
                 ProgressView(value: context.state.progress)
-                Text(context.state.phase)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
             }
             .padding(.vertical, 4)
             .activityBackgroundTint(.black.opacity(0.82))
@@ -41,12 +37,7 @@ struct RenderLiveActivityWidget: Widget {
                         .monospacedDigit()
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    VStack(alignment: .leading, spacing: 5) {
-                        ProgressView(value: context.state.progress)
-                        Text(context.state.phase)
-                            .font(.caption2)
-                            .lineLimit(1)
-                    }
+                    ProgressView(value: context.state.progress)
                 }
             } compactLeading: {
                 Image(systemName: "film.stack")

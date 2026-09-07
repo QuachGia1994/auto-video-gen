@@ -17,6 +17,9 @@ All notable changes to this project are recorded here.
 - Add a Light theme alongside Dark on both mobile apps, with a System / Light / Dark selector in Settings that persists across launches and follows the OS when set to System.
 - Add iOS background render handoff with persisted active-job recovery, a Live Activity surface for render status, background URLSession completion fallback, and APNs-backed Live Activity progress/end updates with terminal alerts when provider credentials are configured.
 
+### Fixed
+- Fix iOS Library completion timestamps continuously increasing after render, repair Preview theme/voice card layout, localize the server-default theme label, remove the inactive Library selection control, and simplify Live Activity to one unambiguous progress indicator.
+
 ### Changed
 - Add optional progress callbacks to the existing Node/TypeScript pipeline while preserving its CLI inputs and generated artifacts.
 - Replace mobile runtime mock generation and seeded projects with the real local HTTP generation/render path; missing backend configuration now fails explicitly.

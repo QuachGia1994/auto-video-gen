@@ -209,7 +209,8 @@ struct ProjectRow: View {
                     HStack(spacing: 8) {
                         Label(project.duration ?? loc.t("common.rendered"), systemImage: "clock")
                         Text("•")
-                        Text(project.createdAt, style: .relative)
+                        Text(project.createdAt, format: .dateTime.hour().minute())
+                            .monospacedDigit()
                     }
                     .font(.caption)
                     .foregroundStyle(Brand.muted)
@@ -473,23 +474,28 @@ struct PreviewView: View {
     }
 
     private var options: some View {
-        HStack(spacing: 12) {
+        HStack(alignment: .top, spacing: 12) {
             SurfaceCard {
-                Label(loc.t("preview.theme"), systemImage: "paintpalette")
-                    .font(.caption)
-                    .foregroundStyle(Brand.muted)
-                Text(project.theme)
-                    .font(.subheadline.bold())
-                    .padding(.top, 6)
+                VStack(alignment: .leading, spacing: 6) {
+                    Label(loc.t("preview.theme"), systemImage: "paintpalette")
+                        .font(.caption)
+                        .foregroundStyle(Brand.muted)
+                        .lineLimit(1)
+                    Text(project.theme == "Server default" ? loc.t("preview.serverDefault") : project.theme)
+                        .font(.subheadline.bold())
+                        .lineLimit(2)
+                }
             }
             SurfaceCard {
-                Label(loc.t("preview.voice"), systemImage: "waveform")
-                    .font(.caption)
-                    .foregroundStyle(Brand.muted)
-                Text(project.voice)
-                    .font(.subheadline.bold())
-                    .lineLimit(1)
-                    .padding(.top, 6)
+                VStack(alignment: .leading, spacing: 6) {
+                    Label(loc.t("preview.voice"), systemImage: "waveform")
+                        .font(.caption)
+                        .foregroundStyle(Brand.muted)
+                        .lineLimit(1)
+                    Text(project.voice)
+                        .font(.subheadline.bold())
+                        .lineLimit(2)
+                }
             }
         }
     }
@@ -526,11 +532,6 @@ struct LibraryView: View {
             }
         }
         .navigationTitle(loc.t("nav.libraryHeader"))
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button(loc.t("library.select")) {}
-            }
-        }
     }
 }
 
