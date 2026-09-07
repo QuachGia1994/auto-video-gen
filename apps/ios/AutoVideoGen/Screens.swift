@@ -348,28 +348,27 @@ struct GenerationView: View {
 }
 
 struct PreviewView: View {
-    @Environment(\.openURL) private var openURL
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(Localizer.self) private var loc
     let project: VideoProject
-    @State private var showBackendNotice = false
+    @State private var exportModel = VideoExportModel()
+    @State private var showShareSheet = false
 
     var body: some View {
         ZStack {
             BrandBackground()
             ScrollView {
                 VStack(spacing: 20) {
-                    videoMock
+                    playerSection
                     sceneStrip
                     options
-                    Button(action: openVideo) {
-                        Label(loc.t("preview.openMp4"), systemImage: "play.rectangle")
-                            .fontWeight(.semibold)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 52)
-                            .foregroundStyle(.white)
-                            .background(Brand.gradient, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
-                            .shadow(color: Brand.primary.opacity(0.45), radius: 14, y: 8)
+                    if project.videoURL != nil {
+                        exportButton
+                        if case .failed = exportModel.state {
+                            Text(loc.t("export.failed"))
+                                .font(.caption)
+                                .foregroundStyle(Brand.danger)
+                        }
                     }
                 }
                 .padding(.horizontal, 18)
@@ -379,22 +378,36 @@ struct PreviewView: View {
         .navigationTitle(loc.t("nav.preview"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if let videoURL = project.videoURL {
+            if project.videoURL != nil {
                 ToolbarItem(placement: .topBarTrailing) {
-                    ShareLink(item: videoURL) {
+                    Button(action: startExport) {
                         Image(systemName: "square.and.arrow.up")
                     }
+                    .disabled(exportModel.isPreparing)
+                    .accessibilityLabel(loc.t("preview.exportMp4"))
                 }
             }
         }
-        .alert(loc.t("preview.unavailableTitle"), isPresented: $showBackendNotice) {
-            Button(loc.t("common.ok"), role: .cancel) {}
-        } message: {
-            Text(loc.t("preview.unavailableBody"))
+        .sheet(isPresented: $showShareSheet) {
+            if case let .ready(fileURL) = exportModel.state {
+                ShareSheet(items: [fileURL])
+            }
+        }
+        .onChange(of: exportModel.state) { _, state in
+            if case .ready = state { showShareSheet = true }
+        }
+        .onDisappear { exportModel.cleanup() }
+    }
+
+    @ViewBuilder private var playerSection: some View {
+        if let videoURL = project.videoURL {
+            VideoPlayerCard(url: videoURL)
+        } else {
+            unavailableCard
         }
     }
 
-    private var videoMock: some View {
+    private var unavailableCard: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 28, style: .continuous)
                 .fill(
@@ -404,39 +417,48 @@ struct PreviewView: View {
                         endPoint: .bottomTrailing
                     )
                 )
-            VStack(spacing: 18) {
-                Spacer()
-                Image(systemName: "sparkles")
+            VStack(spacing: 14) {
+                Image(systemName: "film.stack")
                     .font(.largeTitle)
                     .foregroundStyle(.white)
-                Text(project.title.uppercased())
-                    .font(.system(size: 30, weight: .black, design: .rounded))
+                Text(loc.t("preview.unavailableTitle"))
+                    .font(.headline)
                     .foregroundStyle(.white)
+                Text(loc.t("preview.unavailableBody"))
+                    .font(.caption)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 20)
-                Text(loc.t("preview.mockupTagline"))
-                    .font(.caption.bold())
-                    .tracking(1.3)
-                    .foregroundStyle(.white.opacity(0.72))
-                Spacer()
-                Button(action: openVideo) {
-                    Image(systemName: "play.circle.fill")
-                        .font(.system(size: 58))
-                        .symbolRenderingMode(.hierarchical)
-                        .foregroundStyle(.white)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(loc.t("preview.openMp4"))
-                Text(project.duration.map { "0:00 / \($0)" } ?? loc.t("preview.renderedMp4"))
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.white.opacity(0.72))
-                    .padding(.bottom, 20)
+                    .foregroundStyle(.white.opacity(0.75))
+                    .padding(.horizontal, 24)
             }
         }
         .frame(maxWidth: 320)
         .aspectRatio(9 / 16, contentMode: .fit)
         .shadow(color: Brand.primary.opacity(0.3), radius: 34, y: 18)
-        .accessibilityLabel("\(loc.t("nav.preview")): \(project.title)")
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(loc.t("preview.unavailableTitle")): \(project.title)")
+    }
+
+    private var exportButton: some View {
+        Button {
+            if exportModel.isPreparing { exportModel.cancel() } else { startExport() }
+        } label: {
+            HStack(spacing: 8) {
+                if exportModel.isPreparing {
+                    ProgressView().tint(.white)
+                    Text(loc.t("export.preparing")).fontWeight(.semibold)
+                    Text(loc.t("export.cancel")).fontWeight(.semibold).underline()
+                } else {
+                    Image(systemName: "square.and.arrow.up")
+                    Text(loc.t("preview.exportMp4")).fontWeight(.semibold)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 52)
+            .foregroundStyle(.white)
+            .background(Brand.gradient, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+            .shadow(color: Brand.primary.opacity(0.45), radius: 14, y: 8)
+        }
+        .buttonStyle(.plain)
     }
 
     private var sceneStrip: some View {
@@ -516,12 +538,19 @@ struct PreviewView: View {
         }
     }
 
-    private func openVideo() {
-        guard let videoURL = project.videoURL else {
-            showBackendNotice = true
-            return
-        }
-        openURL(videoURL)
+    private func startExport() {
+        guard let videoURL = project.videoURL else { return }
+        exportModel.start(url: videoURL, authToken: BackendConfig.authToken, fileName: exportFileName)
+    }
+
+    private var exportFileName: String {
+        let allowed = CharacterSet.alphanumerics
+            .union(.whitespaces)
+            .union(CharacterSet(charactersIn: "-_"))
+        let cleaned = String(project.title.unicodeScalars.filter { allowed.contains($0) })
+            .trimmingCharacters(in: .whitespaces)
+        let base = cleaned.isEmpty ? "video" : cleaned
+        return "\(base).mp4"
     }
 }
 

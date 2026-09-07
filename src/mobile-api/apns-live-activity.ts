@@ -13,6 +13,10 @@ export type LiveActivityLocale = "vi" | "en" | "zh" | "ja" | "fr";
 export const LIVE_ACTIVITY_LOCALES = new Set<LiveActivityLocale>(["vi", "en", "zh", "ja", "fr"]);
 
 export interface LiveActivityPushPublisher {
+  // `locale` is validated/stored at the boundary but the remote push no longer
+  // carries a user-facing alert: the on-device local notification is the single
+  // alert owner (see docs plan A). Kept for a future Notification Service Extension
+  // that could localize a remote alert.
   send(args: {
     token: string;
     event: LiveActivityPushEvent;
@@ -99,55 +103,10 @@ function createProviderToken(config: Extract<APNsLiveActivityConfig, { authMode:
   return `${signingInput}.${base64Url(signature)}`;
 }
 
-const ALERT_COPY: Record<LiveActivityLocale, {
-  readyTitle: string;
-  readyBody: (title: string) => string;
-  stoppedTitle: string;
-  stoppedBody: (title: string) => string;
-  fallbackTitle: string;
-}> = {
-  en: {
-    readyTitle: "Video ready",
-    readyBody: (title) => `${title} finished rendering and is ready to review.`,
-    stoppedTitle: "Render stopped",
-    stoppedBody: (title) => `${title} could not be completed.`,
-    fallbackTitle: "Video",
-  },
-  vi: {
-    readyTitle: "Video đã sẵn sàng",
-    readyBody: (title) => `${title} đã render xong và sẵn sàng để xem.`,
-    stoppedTitle: "Đã dừng render",
-    stoppedBody: (title) => `${title} không thể hoàn tất.`,
-    fallbackTitle: "Video",
-  },
-  zh: {
-    readyTitle: "视频已就绪",
-    readyBody: (title) => `${title} 已完成渲染，可以查看。`,
-    stoppedTitle: "渲染已停止",
-    stoppedBody: (title) => `${title} 无法完成。`,
-    fallbackTitle: "视频",
-  },
-  ja: {
-    readyTitle: "動画の準備ができました",
-    readyBody: (title) => `${title} のレンダリングが完了し、確認できます。`,
-    stoppedTitle: "レンダリングを停止しました",
-    stoppedBody: (title) => `${title} を完了できませんでした。`,
-    fallbackTitle: "動画",
-  },
-  fr: {
-    readyTitle: "Vidéo prête",
-    readyBody: (title) => `Le rendu de ${title} est terminé et prêt à être visionné.`,
-    stoppedTitle: "Rendu interrompu",
-    stoppedBody: (title) => `Le rendu de ${title} n’a pas pu être terminé.`,
-    fallbackTitle: "Vidéo",
-  },
-};
-
 export function buildLiveActivityPushPayload(
   event: LiveActivityPushEvent,
   state: LiveActivityContentState,
-  title?: string,
-  locale: LiveActivityLocale = "en",
+  _title?: string,
 ) {
   const now = Math.floor(Date.now() / 1_000);
   const aps: Record<string, unknown> = {
@@ -158,14 +117,12 @@ export function buildLiveActivityPushPayload(
   if (event === "update") {
     aps["stale-date"] = now + 120;
   } else {
+    // End the Live Activity silently. The user-facing completion alert is owned
+    // solely by the on-device local notification (RenderBackgroundCoordinator),
+    // which is correct-locale by construction and does not depend on APNs
+    // delivery. A remote alert here would double-notify or, worse, be the only
+    // path and silently fail when APNs is misconfigured. See docs plan A.
     aps["dismissal-date"] = now + 15 * 60;
-    const copy = ALERT_COPY[locale];
-    const displayTitle = title?.trim() || copy.fallbackTitle;
-    aps.alert = {
-      title: state.failed ? copy.stoppedTitle : copy.readyTitle,
-      body: state.failed ? copy.stoppedBody(displayTitle) : copy.readyBody(displayTitle),
-      sound: "default",
-    };
   }
   return { aps };
 }
@@ -203,8 +160,8 @@ export function createAPNsLiveActivityPublisher(config: APNsLiveActivityConfig):
   };
 
   return {
-    async send({ token, event, state, title, locale }) {
-      const payload = JSON.stringify(buildLiveActivityPushPayload(event, state, title, locale));
+    async send({ token, event, state, title }) {
+      const payload = JSON.stringify(buildLiveActivityPushPayload(event, state, title));
       const client = getSession();
       await new Promise<void>((resolve, reject) => {
         let status = 0;

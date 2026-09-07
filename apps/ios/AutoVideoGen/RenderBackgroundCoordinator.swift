@@ -53,6 +53,28 @@ enum LiveActivityPushRegistrationStore {
     }
 }
 
+// Deterministic dedup for the terminal completion notification. The local
+// notification is the single alert owner, so it may be reached by more than one
+// terminal signal for the same job (a fresh /wait after resume, or a job that is
+// already terminal when /wait is first hit). Marking the job here guarantees at
+// most one delivered notification per job without any timing guard.
+enum TerminalNotificationStore {
+    private static let key = "notified_terminal_jobs_v1"
+    private static let cap = 200
+
+    static func contains(_ jobID: String) -> Bool {
+        (UserDefaults.standard.stringArray(forKey: key) ?? []).contains(jobID)
+    }
+
+    static func mark(_ jobID: String) {
+        var jobs = UserDefaults.standard.stringArray(forKey: key) ?? []
+        guard !jobs.contains(jobID) else { return }
+        jobs.append(jobID)
+        if jobs.count > cap { jobs.removeFirst(jobs.count - cap) }
+        UserDefaults.standard.set(jobs, forKey: key)
+    }
+}
+
 private struct LiveActivityRegistrationResponse: Decodable {
     let pushEnabled: Bool
 }
@@ -211,12 +233,14 @@ private struct BackgroundRenderResult: Decodable, Sendable {
     let videoUrl: String?
 }
 
-final class BackgroundRenderMonitor: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
+final class BackgroundRenderMonitor: NSObject, URLSessionDownloadDelegate, UNUserNotificationCenterDelegate, @unchecked Sendable {
     static let shared = BackgroundRenderMonitor()
     static let sessionIdentifier = "com.autovideogen.mobile.render-monitor"
 
     private let lock = NSLock()
     private var backgroundEventsCompletionHandler: (() -> Void)?
+    private var backgroundEventsFinished = false
+    private var pendingNotificationWork = 0
     private lazy var session: URLSession = {
         let configuration = URLSessionConfiguration.background(withIdentifier: Self.sessionIdentifier)
         configuration.sessionSendsLaunchEvents = true
@@ -238,7 +262,6 @@ final class BackgroundRenderMonitor: NSObject, URLSessionDownloadDelegate, @unch
     }
 
     func track(jobID: String, baseURL: URL, authToken: String?) {
-        requestNotificationPermission()
         guard let url = URL(string: "/v1/render-jobs/\(jobID)/wait", relativeTo: baseURL)?.absoluteURL else { return }
         session.getAllTasks { [weak self] tasks in
             guard let self else { return }
@@ -258,6 +281,7 @@ final class BackgroundRenderMonitor: NSObject, URLSessionDownloadDelegate, @unch
     func setBackgroundEventsCompletionHandler(_ completionHandler: @escaping () -> Void) {
         lock.lock()
         backgroundEventsCompletionHandler = completionHandler
+        backgroundEventsFinished = false
         lock.unlock()
         reconnect()
     }
@@ -275,11 +299,11 @@ final class BackgroundRenderMonitor: NSObject, URLSessionDownloadDelegate, @unch
                 failed: result.status != "completed"
             )
         }
-        if LiveActivityPushRegistrationStore.contains(result.id) {
-            LiveActivityPushRegistrationStore.clear(result.id)
-        } else {
-            scheduleCompletionNotification(result)
-        }
+        // Registration state is no longer used to suppress the local alert (that
+        // conflated remote-push capability with actual delivery). The local
+        // notification is the single alert owner; just keep the store tidy.
+        LiveActivityPushRegistrationStore.clear(result.id)
+        scheduleCompletionNotification(result)
     }
 
     func urlSession(
@@ -291,20 +315,38 @@ final class BackgroundRenderMonitor: NSObject, URLSessionDownloadDelegate, @unch
     }
 
     func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) {
+        // Hand control back to the system only after any pending notification
+        // add() has completed, so the app is not re-suspended before the
+        // completion alert is actually registered.
         lock.lock()
-        let handler = backgroundEventsCompletionHandler
-        backgroundEventsCompletionHandler = nil
+        backgroundEventsFinished = true
+        let ready = pendingNotificationWork == 0
+        let handler = ready ? backgroundEventsCompletionHandler : nil
+        if ready {
+            backgroundEventsCompletionHandler = nil
+            backgroundEventsFinished = false
+        }
         lock.unlock()
         handler?()
     }
 
-    private func requestNotificationPermission() {
+    func requestNotificationAuthorization() {
         Task {
             _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
         }
     }
 
+    // Foreground-delivered completions must still be visible; without this the
+    // system suppresses the banner while the app is active.
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification
+    ) async -> UNNotificationPresentationOptions {
+        [.banner, .sound, .list]
+    }
+
     private func scheduleCompletionNotification(_ result: BackgroundRenderResult) {
+        guard !TerminalNotificationStore.contains(result.id) else { return }
         let content = UNMutableNotificationContent()
         let language = AppLanguage.persistedOrDevice()
         let titleKey = result.status == "completed" ? "notification.videoReadyTitle" : "notification.renderStoppedTitle"
@@ -319,12 +361,45 @@ final class BackgroundRenderMonitor: NSObject, URLSessionDownloadDelegate, @unch
             content: content,
             trigger: nil
         )
-        UNUserNotificationCenter.current().add(request) { _ in }
+        lock.lock()
+        pendingNotificationWork += 1
+        lock.unlock()
+        UNUserNotificationCenter.current().add(request) { [weak self] error in
+            if error == nil {
+                TerminalNotificationStore.mark(result.id)
+            }
+            self?.completeNotificationWork()
+        }
+    }
+
+    private func completeNotificationWork() {
+        lock.lock()
+        if pendingNotificationWork > 0 { pendingNotificationWork -= 1 }
+        let ready = backgroundEventsFinished && pendingNotificationWork == 0
+        let handler = ready ? backgroundEventsCompletionHandler : nil
+        if ready {
+            backgroundEventsCompletionHandler = nil
+            backgroundEventsFinished = false
+        }
+        lock.unlock()
+        handler?()
     }
 }
 
 @MainActor
 final class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
+        // Own foreground presentation and request authorization once at launch,
+        // before any render can complete, so the completion notification is not
+        // gated on a permission requested lazily mid-job.
+        UNUserNotificationCenter.current().delegate = BackgroundRenderMonitor.shared
+        BackgroundRenderMonitor.shared.requestNotificationAuthorization()
+        return true
+    }
+
     func application(
         _ application: UIApplication,
         handleEventsForBackgroundURLSession identifier: String,

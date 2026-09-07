@@ -55,26 +55,29 @@ describe("buildLiveActivityPushPayload", () => {
     expect(typeof payload.aps["stale-date"]).toBe("number");
   });
 
-  it("builds terminal alerts on end", () => {
+  it("ends the live activity silently, without a remote alert", () => {
+    // The on-device local notification is the single owner of the completion
+    // alert, so the APNs end push must never carry one (no double-notify, and
+    // no zero-notify when APNs is misconfigured). See docs plan A.
     const payload = buildLiveActivityPushPayload("end", {
       progress: 1,
       completed: true,
       failed: false,
-    }, "My video", "en") as { aps: Record<string, any> };
+    }, "My video") as { aps: Record<string, any> };
     expect(payload.aps.event).toBe("end");
-    expect(payload.aps.alert.title).toBe("Video ready");
-    expect(payload.aps.alert.body).toContain("My video");
-    expect(payload.aps.alert.sound).toBe("default");
+    expect(payload.aps.alert).toBeUndefined();
     expect(typeof payload.aps["dismissal-date"]).toBe("number");
   });
 
-  it("localizes terminal alerts to the registered app locale", () => {
+  it("ends silently even on a failed terminal state", () => {
     const payload = buildLiveActivityPushPayload("end", {
-      progress: 1,
-      completed: true,
-      failed: false,
-    }, "Bản tin sáng", "vi") as { aps: Record<string, any> };
-    expect(payload.aps.alert.title).toBe("Video đã sẵn sàng");
-    expect(payload.aps.alert.body).toBe("Bản tin sáng đã render xong và sẵn sàng để xem.");
+      progress: 0,
+      completed: false,
+      failed: true,
+    }, "My video") as { aps: Record<string, any> };
+    expect(payload.aps.event).toBe("end");
+    expect(payload.aps.alert).toBeUndefined();
+    expect(payload.aps["stale-date"]).toBeUndefined();
+    expect(typeof payload.aps["dismissal-date"]).toBe("number");
   });
 });

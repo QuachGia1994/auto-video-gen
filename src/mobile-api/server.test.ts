@@ -80,7 +80,29 @@ describe("createMobileApiServer", () => {
     const video = await fetch(`${baseUrl}${completed.videoUrl}`);
     expect(video.status).toBe(200);
     expect(video.headers.get("content-type")).toBe("video/mp4");
+    expect(video.headers.get("accept-ranges")).toBe("bytes");
+    expect(video.headers.get("content-length")).toBe("11");
     expect(await video.text()).toBe("video-bytes");
+
+    const partial = await fetch(`${baseUrl}${completed.videoUrl}`, {
+      headers: { range: "bytes=2-6" },
+    });
+    expect(partial.status).toBe(206);
+    expect(partial.headers.get("content-range")).toBe("bytes 2-6/11");
+    expect(partial.headers.get("content-length")).toBe("5");
+    expect(await partial.text()).toBe("deo-b");
+
+    const head = await fetch(`${baseUrl}${completed.videoUrl}`, { method: "HEAD" });
+    expect(head.status).toBe(200);
+    expect(head.headers.get("accept-ranges")).toBe("bytes");
+    expect(head.headers.get("content-length")).toBe("11");
+    expect(await head.text()).toBe("");
+
+    const invalidRange = await fetch(`${baseUrl}${completed.videoUrl}`, {
+      headers: { range: "bytes=50-60" },
+    });
+    expect(invalidRange.status).toBe(416);
+    expect(invalidRange.headers.get("content-range")).toBe("bytes */11");
   });
 
   it("generates a script from a mobile source request before queuing the existing render job", async () => {

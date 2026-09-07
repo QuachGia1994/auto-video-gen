@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { createReadStream } from "node:fs";
+import { stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { ScriptSchema } from "../render/script-schema.js";
 import { LIVE_ACTIVITY_LOCALES, type LiveActivityLocale } from "./apns-live-activity.js";
@@ -78,6 +79,27 @@ function parseLiveActivityLocale(value: unknown): LiveActivityLocale | null {
   if (!normalized) return "en";
   const locale = normalized as LiveActivityLocale;
   return LIVE_ACTIVITY_LOCALES.has(locale) ? locale : null;
+}
+
+type ByteRange = { start: number; end: number };
+
+function parseByteRange(value: string | undefined, size: number): ByteRange | null | "invalid" {
+  if (!value) return null;
+  if (size <= 0) return "invalid";
+  const match = /^bytes=(\d*)-(\d*)$/.exec(value.trim());
+  if (!match || (!match[1] && !match[2])) return "invalid";
+
+  if (!match[1]) {
+    const suffixLength = Number(match[2]);
+    if (!Number.isSafeInteger(suffixLength) || suffixLength <= 0) return "invalid";
+    return { start: Math.max(size - suffixLength, 0), end: size - 1 };
+  }
+
+  const start = Number(match[1]);
+  const requestedEnd = match[2] ? Number(match[2]) : size - 1;
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(requestedEnd) || start >= size) return "invalid";
+  const end = Math.min(requestedEnd, size - 1);
+  return end >= start ? { start, end } : "invalid";
 }
 
 export function createMobileApiServer(
@@ -245,13 +267,55 @@ export function createMobileApiServer(
       return;
     }
 
-    if (method === "GET" && jobPath.action === "video") {
+    if ((method === "GET" || method === "HEAD") && jobPath.action === "video") {
       const videoPath = manager.getVideoPath(jobPath.id);
       if (!videoPath) {
         sendJson(response, 409, { error: "video_not_ready" });
         return;
       }
-      response.writeHead(200, { "content-type": "video/mp4" });
+
+      let size: number;
+      try {
+        size = (await stat(videoPath)).size;
+      } catch {
+        sendJson(response, 404, { error: "video_missing" });
+        return;
+      }
+
+      const range = parseByteRange(request.headers.range, size);
+      if (range === "invalid") {
+        response.writeHead(416, {
+          "accept-ranges": "bytes",
+          "content-range": `bytes */${size}`,
+        });
+        response.end();
+        return;
+      }
+
+      const headers: Record<string, string | number> = {
+        "accept-ranges": "bytes",
+        "content-type": "video/mp4",
+      };
+      if (range) {
+        headers["content-length"] = range.end - range.start + 1;
+        headers["content-range"] = `bytes ${range.start}-${range.end}/${size}`;
+        response.writeHead(206, headers);
+        if (method === "HEAD") {
+          response.end();
+          return;
+        }
+        const stream = createReadStream(videoPath, { start: range.start, end: range.end });
+        stream.on("error", () => response.destroy());
+        stream.pipe(response);
+        return;
+      }
+
+      headers["content-length"] = size;
+      response.writeHead(200, headers);
+      if (method === "HEAD") {
+        response.end();
+        return;
+      }
       const stream = createReadStream(videoPath);
       stream.on("error", () => response.destroy());
       stream.pipe(response);

@@ -15,12 +15,13 @@ All notable changes to this project are recorded here.
 - Add explicit physical-device LAN support for the mobile backend: configurable bind host, mandatory bearer protection for non-loopback write endpoints, and iOS/Android client token injection.
 - Add in-app language switching to both mobile apps (Vietnamese, English, Chinese, Japanese, French) with first-run device-locale detection and a persisted choice that re-localizes every screen at runtime without a restart.
 - Add a Light theme alongside Dark on both mobile apps, with a System / Light / Dark selector in Settings that persists across launches and follows the OS when set to System.
-- Add iOS background render handoff with persisted active-job recovery, a Live Activity surface for render status, background URLSession completion fallback, and APNs-backed Live Activity progress/end updates with terminal alerts when provider credentials are configured.
+- Add iOS background render handoff with persisted active-job recovery, a Live Activity surface for render status, background URLSession completion fallback, APNs-backed Live Activity progress/end updates, and device-owned terminal notifications.
 
 ### Fixed
 - Fix iOS Library completion timestamps continuously increasing after render, repair Preview theme/voice card layout, localize the server-default theme label, remove the inactive Library selection control, and simplify Live Activity to one unambiguous progress indicator.
-- Localize iOS background/APNs completion alerts, make APNs the Live Activity progress authority when enabled while keeping the same 8-step local fallback formula, remove the server-default theme magic string, make Preview playback affordances truthful and tappable, and retry transient status-poll failures without abandoning an active render.
+- Localize iOS completion alerts, make APNs the Live Activity progress authority when enabled while keeping the same 8-step local fallback formula, remove the server-default theme magic string, make Preview playback affordances truthful and tappable, and retry transient status-poll failures without abandoning an active render.
 - Prevent push-triggered physical-device iOS artifacts from silently embedding a loopback backend URL; resolve the backend from a repository variable (or manual dispatch override) and fail CI on empty/loopback endpoints.
+- Make the on-device notification the single terminal-alert owner, add native in-app AVPlayer preview and file-based MP4 sharing/export, and serve MP4 byte ranges/HEAD metadata so native seeking and replay work without Safari.
 
 ### Changed
 - Add optional progress callbacks to the existing Node/TypeScript pipeline while preserving its CLI inputs and generated artifacts.
