@@ -20,6 +20,7 @@ All notable changes to this project are recorded here.
 ### Fixed
 - Fix iOS Library completion timestamps continuously increasing after render, repair Preview theme/voice card layout, localize the server-default theme label, remove the inactive Library selection control, and simplify Live Activity to one unambiguous progress indicator.
 - Localize iOS background/APNs completion alerts, make APNs the Live Activity progress authority when enabled while keeping the same 8-step local fallback formula, remove the server-default theme magic string, make Preview playback affordances truthful and tappable, and retry transient status-poll failures without abandoning an active render.
+- Prevent push-triggered physical-device iOS artifacts from silently embedding a loopback backend URL; resolve the backend from a repository variable (or manual dispatch override) and fail CI on empty/loopback endpoints.
 
 ### Changed
 - Add optional progress callbacks to the existing Node/TypeScript pipeline while preserving its CLI inputs and generated artifacts.

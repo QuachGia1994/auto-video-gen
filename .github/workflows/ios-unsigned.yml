@@ -6,7 +6,7 @@ on:
       mobile_api_base_url:
         description: "Physical-device backend URL (for example http://192.168.1.10:4319)"
         required: false
-        default: "http://127.0.0.1:4319"
+        default: ""
   push:
     branches: [main]
     paths:
@@ -37,9 +37,38 @@ jobs:
       - name: Generate Xcode project
         run: xcodegen generate
 
+      - name: Resolve physical-device backend
+        env:
+          MOBILE_API_BASE_URL: ${{ inputs.mobile_api_base_url || vars.IOS_MOBILE_API_BASE_URL }}
+        run: |
+          if [ -z "$MOBILE_API_BASE_URL" ]; then
+            echo "IOS_MOBILE_API_BASE_URL is required for physical-device IPA builds"
+            exit 1
+          fi
+          python3 - <<'PY'
+          import ipaddress
+          import os
+          import sys
+          from urllib.parse import urlparse
+
+          raw = os.environ["MOBILE_API_BASE_URL"]
+          parsed = urlparse(raw)
+          host = parsed.hostname
+          if parsed.scheme not in {"http", "https"} or not host:
+              sys.exit(f"Invalid physical-device backend URL: {raw}")
+          if host.lower() == "localhost":
+              sys.exit(f"Physical-device IPA cannot use a loopback backend URL: {raw}")
+          try:
+              address = ipaddress.ip_address(host)
+          except ValueError:
+              address = None
+          if address is not None and (address.is_loopback or address.is_unspecified):
+              sys.exit(f"Physical-device IPA cannot use a loopback/unspecified backend URL: {raw}")
+          PY
+
       - name: Build unsigned app
         env:
-          MOBILE_API_BASE_URL: ${{ inputs.mobile_api_base_url || 'http://127.0.0.1:4319' }}
+          MOBILE_API_BASE_URL: ${{ inputs.mobile_api_base_url || vars.IOS_MOBILE_API_BASE_URL }}
           MOBILE_API_AUTH_TOKEN: ${{ secrets.IOS_MOBILE_API_TOKEN }}
         run: |
           xcodebuild \
