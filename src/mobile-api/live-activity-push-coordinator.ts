@@ -56,7 +56,7 @@ export function liveActivityStateFor(snapshot: RenderJobSnapshot): LiveActivityC
 
 export function createLiveActivityPushCoordinator(
   manager: RenderJobManager,
-  publisher: LiveActivityPushPublisher,
+  publisher?: LiveActivityPushPublisher,
 ) {
   const registrations = new Map<string, RegisteredActivity>();
 
@@ -94,10 +94,12 @@ export function createLiveActivityPushCoordinator(
     record.lastPhase = state.phase;
     const event = terminal ? "end" as const : "update" as const;
     record.chain = record.chain.then(async () => {
-      try {
-        await publisher.send({ token: record.token, event, state, title: snapshot.title });
-      } catch (error) {
-        log.warn(`Live Activity APNs push failed for ${jobID}: ${error instanceof Error ? error.message : "unknown error"}`);
+      if (publisher) {
+        try {
+          await publisher.send({ token: record.token, event, state, title: snapshot.title });
+        } catch (error) {
+          log.warn(`Live Activity APNs push failed for ${jobID}: ${error instanceof Error ? error.message : "unknown error"}`);
+        }
       }
       if (terminal) {
         registrations.get(jobID)?.unsubscribe();
@@ -107,12 +109,14 @@ export function createLiveActivityPushCoordinator(
   };
 
   return {
+    pushEnabled: Boolean(publisher),
     register(jobID: string, token: string) {
       const job = manager.get(jobID);
       if (!job) return false;
       const existing = registrations.get(jobID);
       if (existing) {
         existing.token = token;
+        log.info(`Live Activity push token refreshed for ${jobID} (remote push ${publisher ? "enabled" : "disabled"})`);
         enqueue(jobID, job, true);
         return true;
       }
@@ -125,6 +129,7 @@ export function createLiveActivityPushCoordinator(
         chain: Promise.resolve(),
       };
       registrations.set(jobID, record);
+      log.info(`Live Activity push token registered for ${jobID} (remote push ${publisher ? "enabled" : "disabled"})`);
       record.unsubscribe = manager.subscribe(jobID, (snapshot) => enqueue(jobID, snapshot));
       return true;
     },
@@ -134,7 +139,7 @@ export function createLiveActivityPushCoordinator(
         record.unsubscribe();
       }
       registrations.clear();
-      publisher.close();
+      publisher?.close();
     },
   };
 }

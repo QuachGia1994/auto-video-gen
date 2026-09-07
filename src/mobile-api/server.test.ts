@@ -27,7 +27,7 @@ async function startServer(
   runner: PipelineRunner,
   generation?: { sourceResolver: SourceResolver; scriptGenerator: ScriptGenerator },
   writeToken?: string,
-  liveActivityPush?: { register(jobID: string, token: string): boolean },
+  liveActivityPush?: { pushEnabled: boolean; register(jobID: string, token: string): boolean },
 ) {
   const outputRoot = await mkdtemp(join(tmpdir(), "auto-video-gen-api-"));
   tempDirs.push(outputRoot);
@@ -152,6 +152,7 @@ describe("createMobileApiServer", () => {
   it("registers authenticated Live Activity push tokens for an existing job", async () => {
     const registrations: Array<{ jobID: string; token: string }> = [];
     const liveActivityPush = {
+      pushEnabled: true,
       register(jobID: string, token: string) {
         registrations.push({ jobID, token });
         return true;
@@ -189,7 +190,45 @@ describe("createMobileApiServer", () => {
       body: JSON.stringify({ token }),
     });
     expect(registered.status).toBe(202);
+    expect(await registered.json()).toEqual({ ok: true, pushEnabled: true });
     expect(registrations).toEqual([{ jobID: created.id, token }]);
+  });
+
+  it("accepts Live Activity tokens while remote APNs publishing is disabled", async () => {
+    const registrations: string[] = [];
+    const liveActivityPush = {
+      pushEnabled: false,
+      register(_jobID: string, token: string) {
+        registrations.push(token);
+        return true;
+      },
+    };
+    const runner: PipelineRunner = async (scriptPath) => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      await writeFile(join(dirname(scriptPath), "video.mp4"), "video");
+    };
+    const baseUrl = await startServer(runner, undefined, "physical-device-token", liveActivityPush);
+    const createdResponse = await fetch(`${baseUrl}/v1/render-jobs`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer physical-device-token",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ script: await loadFixtureScript() }),
+    });
+    const created = await createdResponse.json() as { id: string };
+    const token = "cd".repeat(32);
+    const registered = await fetch(`${baseUrl}/v1/render-jobs/${created.id}/live-activity-token`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer physical-device-token",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ token }),
+    });
+    expect(registered.status).toBe(202);
+    expect(await registered.json()).toEqual({ ok: true, pushEnabled: false });
+    expect(registrations).toEqual([token]);
   });
 
   it("holds the wait endpoint until a job reaches a terminal state", async () => {

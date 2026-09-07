@@ -53,6 +53,10 @@ enum LiveActivityPushRegistrationStore {
     }
 }
 
+private struct LiveActivityRegistrationResponse: Decodable {
+    let pushEnabled: Bool
+}
+
 private enum LiveActivityPushTokenRegistrar {
     static func register(jobID: String, token: Data, baseURL: URL, authToken: String?) async {
         let hexToken = token.map { String(format: "%02x", $0) }.joined()
@@ -66,9 +70,14 @@ private enum LiveActivityPushTokenRegistrar {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             if let authToken { request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization") }
             do {
-                let (_, response) = try await URLSession.shared.data(for: request)
+                let (data, response) = try await URLSession.shared.data(for: request)
                 if let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) {
-                    LiveActivityPushRegistrationStore.mark(jobID)
+                    let registration = try? JSONDecoder().decode(LiveActivityRegistrationResponse.self, from: data)
+                    if registration?.pushEnabled == true {
+                        LiveActivityPushRegistrationStore.mark(jobID)
+                    } else {
+                        LiveActivityPushRegistrationStore.clear(jobID)
+                    }
                     return
                 }
             } catch {

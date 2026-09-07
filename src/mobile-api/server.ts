@@ -13,7 +13,10 @@ type JsonResult = { ok: true; data: unknown } | { ok: false; status: number; err
 
 type MobileApiServerOptions = {
   writeToken?: string;
-  liveActivityPush?: { register(jobID: string, token: string): boolean };
+  liveActivityPush?: {
+    pushEnabled: boolean;
+    register(jobID: string, token: string): boolean;
+  };
 };
 
 function sendJson(response: ServerResponse, status: number, body: unknown) {
@@ -150,7 +153,7 @@ export function createMobileApiServer(
     if (method === "POST" && jobPath.action === "live-activity-token") {
       if (!requireWriteAuthorization(request, response, options.writeToken)) return;
       if (!options.liveActivityPush) {
-        sendJson(response, 503, { error: "live_activity_push_not_configured" });
+        sendJson(response, 503, { error: "live_activity_registration_not_configured" });
         return;
       }
       const body = await readJsonBody(request);
@@ -165,8 +168,12 @@ export function createMobileApiServer(
         sendJson(response, 400, { error: "invalid_live_activity_token" });
         return;
       }
-      options.liveActivityPush.register(jobPath.id, token);
-      sendJson(response, 202, { ok: true });
+      const accepted = options.liveActivityPush.register(jobPath.id, token);
+      if (!accepted) {
+        sendJson(response, 409, { error: "live_activity_registration_rejected" });
+        return;
+      }
+      sendJson(response, 202, { ok: true, pushEnabled: options.liveActivityPush.pushEnabled });
       return;
     }
 

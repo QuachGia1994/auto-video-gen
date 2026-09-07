@@ -62,9 +62,8 @@ const outputRoot = join(process.cwd(), "output", "mobile-api");
 const manager = createRenderJobManager({ outputRoot, runPipeline });
 const generation = createGenerationDependencies();
 const apnsConfig = loadAPNsLiveActivityConfig();
-const liveActivityPush = apnsConfig
-  ? createLiveActivityPushCoordinator(manager, createAPNsLiveActivityPublisher(apnsConfig))
-  : undefined;
+const apnsPublisher = apnsConfig ? createAPNsLiveActivityPublisher(apnsConfig) : undefined;
+const liveActivityPush = createLiveActivityPushCoordinator(manager, apnsPublisher);
 const host = readHost();
 const writeToken = readWriteToken(host);
 const server = createMobileApiServer(manager, generation, { writeToken, liveActivityPush });
