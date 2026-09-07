@@ -27,11 +27,12 @@ async function startServer(
   runner: PipelineRunner,
   generation?: { sourceResolver: SourceResolver; scriptGenerator: ScriptGenerator },
   writeToken?: string,
+  liveActivityPush?: { register(jobID: string, token: string): boolean },
 ) {
   const outputRoot = await mkdtemp(join(tmpdir(), "auto-video-gen-api-"));
   tempDirs.push(outputRoot);
   const manager = createRenderJobManager({ outputRoot, runPipeline: runner });
-  const server = createMobileApiServer(manager, generation, { writeToken });
+  const server = createMobileApiServer(manager, generation, { writeToken, liveActivityPush });
   servers.push(server);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address() as AddressInfo;
@@ -146,6 +147,70 @@ describe("createMobileApiServer", () => {
       body: JSON.stringify({ script: fixture }),
     });
     expect(authorized.status).toBe(202);
+  });
+
+  it("registers authenticated Live Activity push tokens for an existing job", async () => {
+    const registrations: Array<{ jobID: string; token: string }> = [];
+    const liveActivityPush = {
+      register(jobID: string, token: string) {
+        registrations.push({ jobID, token });
+        return true;
+      },
+    };
+    const runner: PipelineRunner = async (scriptPath) => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      await writeFile(join(dirname(scriptPath), "video.mp4"), "video");
+    };
+    const baseUrl = await startServer(runner, undefined, "physical-device-token", liveActivityPush);
+    const createdResponse = await fetch(`${baseUrl}/v1/render-jobs`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer physical-device-token",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ script: await loadFixtureScript() }),
+    });
+    const created = await createdResponse.json() as { id: string };
+    const token = "ab".repeat(32);
+
+    const unauthorized = await fetch(`${baseUrl}/v1/render-jobs/${created.id}/live-activity-token`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token }),
+    });
+    expect(unauthorized.status).toBe(401);
+
+    const registered = await fetch(`${baseUrl}/v1/render-jobs/${created.id}/live-activity-token`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer physical-device-token",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ token }),
+    });
+    expect(registered.status).toBe(202);
+    expect(registrations).toEqual([{ jobID: created.id, token }]);
+  });
+
+  it("holds the wait endpoint until a job reaches a terminal state", async () => {
+    const runner: PipelineRunner = async (scriptPath) => {
+      await new Promise((resolve) => setTimeout(resolve, 35));
+      await writeFile(join(dirname(scriptPath), "video.mp4"), "video");
+    };
+    const baseUrl = await startServer(runner);
+    const createdResponse = await fetch(`${baseUrl}/v1/render-jobs`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ script: await loadFixtureScript() }),
+    });
+    const created = await createdResponse.json() as { id: string };
+
+    const waited = await fetch(`${baseUrl}/v1/render-jobs/${created.id}/wait`);
+    expect(waited.status).toBe(200);
+    const terminal = await waited.json() as { status: string; videoReady: boolean; videoUrl?: string };
+    expect(terminal.status).toBe("completed");
+    expect(terminal.videoReady).toBe(true);
+    expect(terminal.videoUrl).toBe(`/v1/render-jobs/${created.id}/video`);
   });
 
   it("streams current and terminal job states over SSE", async () => {

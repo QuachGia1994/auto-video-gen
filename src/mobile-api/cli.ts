@@ -4,6 +4,8 @@ import { loadConfig } from "../config.js";
 import { runPipeline } from "../pipeline.js";
 import { log } from "../utils/logger.js";
 import { createRenderJobManager } from "./job-manager.js";
+import { createAPNsLiveActivityPublisher, loadAPNsLiveActivityConfig } from "./apns-live-activity.js";
+import { createLiveActivityPushCoordinator } from "./live-activity-push-coordinator.js";
 import { createOpenAICompatibleScriptGenerator, loadScriptGeneratorConfig } from "./script-generator.js";
 import { createMobileApiServer } from "./server.js";
 import { createSourceResolver } from "./source-input.js";
@@ -59,13 +61,19 @@ function createGenerationDependencies() {
 const outputRoot = join(process.cwd(), "output", "mobile-api");
 const manager = createRenderJobManager({ outputRoot, runPipeline });
 const generation = createGenerationDependencies();
+const apnsConfig = loadAPNsLiveActivityConfig();
+const liveActivityPush = apnsConfig
+  ? createLiveActivityPushCoordinator(manager, createAPNsLiveActivityPublisher(apnsConfig))
+  : undefined;
 const host = readHost();
 const writeToken = readWriteToken(host);
-const server = createMobileApiServer(manager, generation, { writeToken });
+const server = createMobileApiServer(manager, generation, { writeToken, liveActivityPush });
 const port = readPort();
 
 server.listen(port, host, () => {
   log.info(`Mobile render API listening on http://${host}:${port}`);
   log.info(`Render jobs write to ${outputRoot}`);
   if (!generation) log.warn("Source generation disabled: set SCRIPT_LLM_BASE_URL, SCRIPT_LLM_MODEL, and SCRIPT_LLM_API_KEY to enable POST /v1/generate");
+  if (apnsConfig) log.info(`Live Activity APNs enabled (${apnsConfig.authMode}, ${apnsConfig.environment})`);
+  else log.warn("Live Activity APNs disabled: configure APNS_AUTH_MODE with token-key or certificate credentials for remote progress updates");
 });

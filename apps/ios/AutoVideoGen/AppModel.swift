@@ -75,12 +75,14 @@ struct PipelineStep: Identifiable, Hashable, Sendable {
 }
 
 enum GenerationEvent: Sendable {
+    case started(jobID: String, title: String)
     case progress(stepID: String, value: Double)
     case completed(VideoProject)
 }
 
 protocol VideoGenerationService: Sendable {
     func generate(_ request: GenerationRequest) -> AsyncThrowingStream<GenerationEvent, Error>
+    func resume(jobID: String) -> AsyncThrowingStream<GenerationEvent, Error>
 }
 
 @MainActor
@@ -93,6 +95,7 @@ final class AppModel {
     var errorMessage: String?
 
     private let service: any VideoGenerationService
+    private var activeJobID: String?
 
     init(service: any VideoGenerationService = MobileAPIVideoGenerationService()) {
         self.service = service
@@ -100,6 +103,15 @@ final class AppModel {
 
     func generate(_ request: GenerationRequest) async {
         guard !isGenerating else { return }
+        await consume(service.generate(request))
+    }
+
+    func resumeActiveGenerationIfNeeded() async {
+        guard !isGenerating, let record = ActiveRenderStore.load() else { return }
+        await consume(service.resume(jobID: record.jobID))
+    }
+
+    private func consume(_ stream: AsyncThrowingStream<GenerationEvent, Error>) async {
         isGenerating = true
         defer { isGenerating = false }
         errorMessage = nil
@@ -107,22 +119,80 @@ final class AppModel {
         currentProject = nil
 
         do {
-            for try await event in service.generate(request) {
+            for try await event in stream {
                 switch event {
+                case let .started(jobID, title):
+                    activeJobID = jobID
+                    ActiveRenderStore.save(jobID: jobID, title: title)
+                    if let baseURL = BackendConfig.baseURL {
+                        BackgroundRenderMonitor.shared.track(
+                            jobID: jobID,
+                            baseURL: baseURL,
+                            authToken: BackendConfig.authToken
+                        )
+                    }
+                    if let baseURL = BackendConfig.baseURL {
+                        RenderLiveActivityController.shared.start(
+                            jobID: jobID,
+                            title: title,
+                            baseURL: baseURL,
+                            authToken: BackendConfig.authToken
+                        )
+                    }
+
                 case let .progress(stepID, value):
                     if let index = steps.firstIndex(where: { $0.id == stepID }) {
                         steps[index].progress = value
                     }
+                    if let activeJobID {
+                        await RenderLiveActivityController.shared.update(
+                            jobID: activeJobID,
+                            progress: overallProgress,
+                            phase: phaseLabel(stepID: stepID, value: value)
+                        )
+                    }
+
                 case let .completed(project):
                     currentProject = project
-                    projects.insert(project, at: 0)
+                    if !projects.contains(where: { $0.id == project.id }) {
+                        projects.insert(project, at: 0)
+                    }
+                    if let activeJobID {
+                        ActiveRenderStore.clear(jobID: activeJobID)
+                        await RenderLiveActivityController.shared.finish(jobID: activeJobID, failed: false)
+                    }
+                    activeJobID = nil
                 }
             }
         } catch is CancellationError {
             return
         } catch {
             errorMessage = error.localizedDescription
+            if let activeJobID,
+               let apiError = error as? MobileAPIError,
+               apiError.isTerminal {
+                ActiveRenderStore.clear(jobID: activeJobID)
+                await RenderLiveActivityController.shared.finish(jobID: activeJobID, failed: true)
+                self.activeJobID = nil
+            }
         }
     }
 
+    private var overallProgress: Double {
+        guard !steps.isEmpty else { return 0 }
+        return steps.reduce(0) { $0 + min(max($1.progress, 0), 1) } / Double(steps.count)
+    }
+
+    private func phaseLabel(stepID: String, value: Double) -> String {
+        let phase: String
+        switch stepID {
+        case "script": phase = "Script"
+        case "voice": phase = "Voice"
+        case "motion": phase = "Motion"
+        case "audio": phase = "Audio mix"
+        case "render": phase = "Render"
+        default: phase = "Processing"
+        }
+        return "\(phase) \(Int((min(max(value, 0), 1) * 100).rounded()))%"
+    }
 }

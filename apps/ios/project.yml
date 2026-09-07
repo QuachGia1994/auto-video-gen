@@ -14,6 +14,7 @@ targets:
     platform: iOS
     sources:
       - path: AutoVideoGen
+      - path: AutoVideoGenShared
     resources:
       - path: AutoVideoGen/Resources
     info:
@@ -28,6 +29,8 @@ targets:
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
         NSLocalNetworkUsageDescription: "Connect to the local Auto Video Gen render backend while testing on a physical device."
+        NSSupportsLiveActivities: true
+        NSSupportsLiveActivitiesFrequentUpdates: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.autovideogen.mobile
@@ -35,3 +38,24 @@ targets:
         MOBILE_API_AUTH_TOKEN: ""
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+    dependencies:
+      - target: AutoVideoGenLiveActivity
+        embed: true
+
+  AutoVideoGenLiveActivity:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: AutoVideoGenLiveActivity
+      - path: AutoVideoGenShared
+    info:
+      path: AutoVideoGenLiveActivity/Info.plist
+      properties:
+        CFBundleDisplayName: Auto Video Gen
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.autovideogen.mobile.liveactivity
+        SKIP_INSTALL: YES
+        APPLICATION_EXTENSION_API_ONLY: YES

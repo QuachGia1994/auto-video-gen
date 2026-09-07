@@ -13,6 +13,7 @@ type JsonResult = { ok: true; data: unknown } | { ok: false; status: number; err
 
 type MobileApiServerOptions = {
   writeToken?: string;
+  liveActivityPush?: { register(jobID: string, token: string): boolean };
 };
 
 function sendJson(response: ServerResponse, status: number, body: unknown) {
@@ -44,7 +45,7 @@ function publicSnapshot(snapshot: RenderJobSnapshot) {
 }
 
 function matchJobPath(pathname: string) {
-  const match = /^\/v1\/render-jobs\/([0-9a-f-]+)(?:\/(events|video))?$/.exec(pathname);
+  const match = /^\/v1\/render-jobs\/([0-9a-f-]+)(?:\/(events|video|wait|live-activity-token))?$/.exec(pathname);
   if (!match) return null;
   return { id: match[1]!, action: match[2] ?? "status" } as const;
 }
@@ -146,6 +147,29 @@ export function createMobileApiServer(
       return;
     }
 
+    if (method === "POST" && jobPath.action === "live-activity-token") {
+      if (!requireWriteAuthorization(request, response, options.writeToken)) return;
+      if (!options.liveActivityPush) {
+        sendJson(response, 503, { error: "live_activity_push_not_configured" });
+        return;
+      }
+      const body = await readJsonBody(request);
+      if (!body.ok) {
+        sendJson(response, body.status, { error: body.error });
+        return;
+      }
+      const token = typeof body.data === "object" && body.data !== null && "token" in body.data
+        ? String((body.data as { token: unknown }).token).trim().toLowerCase()
+        : "";
+      if (!/^[0-9a-f]{32,512}$/.test(token) || token.length % 2 !== 0) {
+        sendJson(response, 400, { error: "invalid_live_activity_token" });
+        return;
+      }
+      options.liveActivityPush.register(jobPath.id, token);
+      sendJson(response, 202, { ok: true });
+      return;
+    }
+
     if (method === "GET" && jobPath.action === "status") {
       sendJson(response, 200, publicSnapshot(job));
       return;
@@ -169,6 +193,30 @@ export function createMobileApiServer(
       });
       if (terminalBeforeSubscriptionReturned) unsubscribe();
       request.on("close", () => unsubscribe?.());
+      return;
+    }
+
+    if (method === "GET" && jobPath.action === "wait") {
+      if (job.status === "completed" || job.status === "failed") {
+        sendJson(response, 200, publicSnapshot(job));
+        return;
+      }
+      response.writeHead(200, {
+        "content-type": "application/json; charset=utf-8",
+        "cache-control": "no-store",
+      });
+      const heartbeat = setInterval(() => response.write("\n"), 15_000);
+      let unsubscribe: (() => void) | undefined;
+      unsubscribe = manager.subscribe(jobPath.id, (snapshot) => {
+        if (snapshot.status !== "completed" && snapshot.status !== "failed") return;
+        clearInterval(heartbeat);
+        unsubscribe?.();
+        response.end(JSON.stringify(publicSnapshot(snapshot)));
+      });
+      response.on("close", () => {
+        clearInterval(heartbeat);
+        unsubscribe?.();
+      });
       return;
     }
 

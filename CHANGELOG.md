@@ -15,6 +15,7 @@ All notable changes to this project are recorded here.
 - Add explicit physical-device LAN support for the mobile backend: configurable bind host, mandatory bearer protection for non-loopback write endpoints, and iOS/Android client token injection.
 - Add in-app language switching to both mobile apps (Vietnamese, English, Chinese, Japanese, French) with first-run device-locale detection and a persisted choice that re-localizes every screen at runtime without a restart.
 - Add a Light theme alongside Dark on both mobile apps, with a System / Light / Dark selector in Settings that persists across launches and follows the OS when set to System.
+- Add iOS background render handoff with persisted active-job recovery, a Live Activity surface for render status, background URLSession completion fallback, and APNs-backed Live Activity progress/end updates with terminal alerts when provider credentials are configured.
 
 ### Changed
 - Add optional progress callbacks to the existing Node/TypeScript pipeline while preserving its CLI inputs and generated artifacts.
@@ -25,3 +26,4 @@ All notable changes to this project are recorded here.
 - Force Workers AI JSON mode for script generation, raise the completion budget to 8,192 tokens at low temperature, and fix mobile pipeline headers so failed generations are never labeled complete.
 - Redesign the iOS and Android app UI with a shared light+dark design-token palette, a gradient brand mark and primary buttons, elevated glass cards with soft shadows, and tinted status pills for a more premium look.
 - Switch the Android bottom navigation to native system tabs (expo-router NativeTabs, Material bottom navigation) instead of the JS-rendered tab bar; tab screens now handle the top safe-area inset and show an in-content page title since native tabs render without a JS header.
+- Keep the iOS display awake only while generation is active, then restore normal Auto-Lock; server-side rendering itself remains independent of app foreground state.

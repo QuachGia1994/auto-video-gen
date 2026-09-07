@@ -3,6 +3,7 @@ import UIKit
 
 @main
 struct AutoVideoGenApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var appModel = AppModel()
     @State private var localizer = Localizer()
     @State private var showingSplash = true
@@ -35,6 +36,10 @@ struct AutoVideoGenApp: App {
                 guard showingSplash else { return }
                 try? await Task.sleep(for: .milliseconds(850))
                 showingSplash = false
+            }
+            .task {
+                BackgroundRenderMonitor.shared.reconnect()
+                await appModel.resumeActiveGenerationIfNeeded()
             }
         }
     }

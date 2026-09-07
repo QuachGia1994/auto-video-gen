@@ -37,12 +37,24 @@ private struct APIErrorBody: Decodable {
     let message: String?
 }
 
-private struct MobileAPIError: LocalizedError {
+struct MobileAPIError: LocalizedError, Sendable {
     let message: String
+    let isTerminal: Bool
+
+    init(message: String, isTerminal: Bool = false) {
+        self.message = message
+        self.isTerminal = isTerminal
+    }
+
     var errorDescription: String? { message }
 }
 
 struct MobileAPIVideoGenerationService: VideoGenerationService {
+    private enum StartPoint: Sendable {
+        case create(GenerationRequest)
+        case resume(String)
+    }
+
     private let baseURL: URL?
     private let authToken: String?
     private let session: URLSession
@@ -58,54 +70,84 @@ struct MobileAPIVideoGenerationService: VideoGenerationService {
     }
 
     func generate(_ request: GenerationRequest) -> AsyncThrowingStream<GenerationEvent, Error> {
+        makeStream(startingAt: .create(request))
+    }
+
+    func resume(jobID: String) -> AsyncThrowingStream<GenerationEvent, Error> {
+        makeStream(startingAt: .resume(jobID))
+    }
+
+    private func makeStream(startingAt startPoint: StartPoint) -> AsyncThrowingStream<GenerationEvent, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
                     guard let baseURL else {
-                        throw MobileAPIError(message: "Backend not configured. Set MobileAPIBaseURL before generating a video.")
+                        throw MobileAPIError(
+                            message: "Backend not configured. Set MobileAPIBaseURL before generating a video.",
+                            isTerminal: true
+                        )
                     }
-                    continuation.yield(.progress(stepID: "script", value: 0.1))
-                    var job = try await createJob(request, baseURL: baseURL)
-                    continuation.yield(.progress(stepID: "script", value: 1))
-                    let deadline = Date.now.addingTimeInterval(30 * 60)
-                    var pollDelayMilliseconds = 450
 
-                    while true {
-                        for event in progressEvents(job) { continuation.yield(event) }
-                        if job.status == "failed" {
-                            throw MobileAPIError(message: job.error ?? "Render failed")
-                        }
-                        if job.status == "completed" {
-                            guard let videoPath = job.videoUrl, let videoURL = URL(string: videoPath, relativeTo: baseURL)?.absoluteURL else {
-                                throw MobileAPIError(message: "Render completed without a video URL")
-                            }
-                            continuation.yield(.completed(VideoProject(
-                                id: UUID(uuidString: job.id) ?? UUID(),
-                                title: job.title,
-                                duration: nil,
-                                createdAt: .now,
-                                status: .completed,
-                                theme: "Server default",
-                                voice: job.voice,
-                                sceneCount: job.sceneCount,
-                                videoURL: videoURL
-                            )))
-                            continuation.finish()
-                            return
-                        }
-                        try Task.checkCancellation()
-                        guard Date.now < deadline else {
-                            throw MobileAPIError(message: "Generation timed out after 30 minutes")
-                        }
-                        try await Task.sleep(for: .milliseconds(pollDelayMilliseconds))
-                        pollDelayMilliseconds = min(Int(Double(pollDelayMilliseconds) * 1.4), 2_500)
-                        job = try await fetchJob(id: job.id, baseURL: baseURL)
+                    var job: RenderJobResponse
+                    switch startPoint {
+                    case let .create(request):
+                        continuation.yield(.progress(stepID: "script", value: 0.1))
+                        job = try await createJob(request, baseURL: baseURL)
+                    case let .resume(jobID):
+                        job = try await fetchJob(id: jobID, baseURL: baseURL)
                     }
+
+                    continuation.yield(.started(jobID: job.id, title: job.title))
+                    continuation.yield(.progress(stepID: "script", value: 1))
+                    try await poll(job: &job, baseURL: baseURL, continuation: continuation)
                 } catch {
                     continuation.finish(throwing: error)
                 }
             }
             continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    private func poll(
+        job: inout RenderJobResponse,
+        baseURL: URL,
+        continuation: AsyncThrowingStream<GenerationEvent, Error>.Continuation
+    ) async throws {
+        let deadline = Date.now.addingTimeInterval(30 * 60)
+        var pollDelayMilliseconds = 450
+
+        while true {
+            for event in progressEvents(job) { continuation.yield(event) }
+            if job.status == "failed" {
+                throw MobileAPIError(message: job.error ?? "Render failed", isTerminal: true)
+            }
+            if job.status == "completed" {
+                guard let videoPath = job.videoUrl,
+                      let videoURL = URL(string: videoPath, relativeTo: baseURL)?.absoluteURL else {
+                    throw MobileAPIError(message: "Render completed without a video URL", isTerminal: true)
+                }
+                continuation.yield(.completed(VideoProject(
+                    id: UUID(uuidString: job.id) ?? UUID(),
+                    title: job.title,
+                    duration: nil,
+                    createdAt: .now,
+                    status: .completed,
+                    theme: "Server default",
+                    voice: job.voice,
+                    sceneCount: job.sceneCount,
+                    videoURL: videoURL
+                )))
+                continuation.finish()
+                return
+            }
+
+            try Task.checkCancellation()
+            guard Date.now < deadline else {
+                throw MobileAPIError(message: "Generation timed out after 30 minutes")
+            }
+            try await Task.sleep(for: .milliseconds(pollDelayMilliseconds))
+            pollDelayMilliseconds = min(Int(Double(pollDelayMilliseconds) * 1.4), 2_500)
+            job = try await fetchJob(id: job.id, baseURL: baseURL)
         }
     }
 
@@ -120,7 +162,7 @@ struct MobileAPIVideoGenerationService: VideoGenerationService {
 
     private func request(path: String, method: String, body: Data?, baseURL: URL) async throws -> RenderJobResponse {
         guard let url = URL(string: path, relativeTo: baseURL)?.absoluteURL else {
-            throw MobileAPIError(message: "Invalid backend URL")
+            throw MobileAPIError(message: "Invalid backend URL", isTerminal: true)
         }
         var request = URLRequest(url: url)
         request.httpMethod = method
@@ -128,10 +170,15 @@ struct MobileAPIVideoGenerationService: VideoGenerationService {
         if body != nil { request.setValue("application/json", forHTTPHeaderField: "Content-Type") }
         if let authToken { request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization") }
         let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse else { throw MobileAPIError(message: "Invalid backend response") }
+        guard let http = response as? HTTPURLResponse else {
+            throw MobileAPIError(message: "Invalid backend response")
+        }
         guard (200..<300).contains(http.statusCode) else {
             let error = try? JSONDecoder().decode(APIErrorBody.self, from: data)
-            throw MobileAPIError(message: error?.message ?? error?.error ?? "Backend HTTP \(http.statusCode)")
+            throw MobileAPIError(
+                message: error?.message ?? error?.error ?? "Backend HTTP \(http.statusCode)",
+                isTerminal: (400..<500).contains(http.statusCode)
+            )
         }
         return try JSONDecoder().decode(RenderJobResponse.self, from: data)
     }
