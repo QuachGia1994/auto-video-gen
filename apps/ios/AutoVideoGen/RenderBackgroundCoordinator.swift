@@ -143,18 +143,16 @@ final class RenderLiveActivityController {
     }
 
     func update(jobID: String, progress: Double, phase: String) async {
-        guard let activity = activity(jobID: jobID) else { return }
         let state = RenderActivityAttributes.ContentState(
             progress: min(max(progress, 0), 1),
             phase: phase,
             completed: false,
             failed: false
         )
-        await activity.update(ActivityContent(state: state, staleDate: nil))
+        await Self.updateActivity(jobID: jobID, state: state)
     }
 
     func finish(jobID: String, failed: Bool) async {
-        guard let activity = activity(jobID: jobID) else { return }
         let state = RenderActivityAttributes.ContentState(
             progress: failed ? 0 : 1,
             phase: failed ? "Render stopped" : "Ready to review",
@@ -164,12 +162,33 @@ final class RenderLiveActivityController {
         let dismissalPolicy: ActivityUIDismissalPolicy = failed
             ? .default
             : .after(.now.addingTimeInterval(15 * 60))
+        await Self.endActivity(jobID: jobID, state: state, dismissalPolicy: dismissalPolicy)
+        tokenObservers[jobID]?.cancel()
+        tokenObservers[jobID] = nil
+    }
+
+    private nonisolated static func updateActivity(
+        jobID: String,
+        state: RenderActivityAttributes.ContentState
+    ) async {
+        guard let activity = Activity<RenderActivityAttributes>.activities.first(where: {
+            $0.attributes.jobID == jobID
+        }) else { return }
+        await activity.update(ActivityContent(state: state, staleDate: nil))
+    }
+
+    private nonisolated static func endActivity(
+        jobID: String,
+        state: RenderActivityAttributes.ContentState,
+        dismissalPolicy: ActivityUIDismissalPolicy
+    ) async {
+        guard let activity = Activity<RenderActivityAttributes>.activities.first(where: {
+            $0.attributes.jobID == jobID
+        }) else { return }
         await activity.end(
             ActivityContent(state: state, staleDate: nil),
             dismissalPolicy: dismissalPolicy
         )
-        tokenObservers[jobID]?.cancel()
-        tokenObservers[jobID] = nil
     }
 
     private func activity(jobID: String) -> Activity<RenderActivityAttributes>? {
