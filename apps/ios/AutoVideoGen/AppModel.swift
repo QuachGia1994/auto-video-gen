@@ -50,7 +50,7 @@ struct VideoProject: Identifiable, Hashable, Sendable {
     let duration: String?
     let createdAt: Date
     let status: ProjectStatus
-    let theme: String
+    let theme: String?
     let voice: String
     let sceneCount: Int
     let videoURL: URL?
@@ -77,6 +77,7 @@ struct PipelineStep: Identifiable, Hashable, Sendable {
 enum GenerationEvent: Sendable {
     case started(jobID: String, title: String)
     case progress(stepID: String, value: Double)
+    case overallProgress(Double)
     case completed(VideoProject)
 }
 
@@ -144,12 +145,10 @@ final class AppModel {
                     if let index = steps.firstIndex(where: { $0.id == stepID }) {
                         steps[index].progress = value
                     }
-                    if let activeJobID {
-                        await RenderLiveActivityController.shared.update(
-                            jobID: activeJobID,
-                            progress: overallProgress,
-                            phase: phaseLabel(stepID: stepID, value: value)
-                        )
+
+                case let .overallProgress(value):
+                    if let activeJobID, !LiveActivityPushRegistrationStore.contains(activeJobID) {
+                        await RenderLiveActivityController.shared.update(jobID: activeJobID, progress: value)
                     }
 
                 case let .completed(project):
@@ -167,10 +166,10 @@ final class AppModel {
         } catch is CancellationError {
             return
         } catch {
-            errorMessage = error.localizedDescription
-            if let activeJobID,
-               let apiError = error as? MobileAPIError,
-               apiError.isTerminal {
+            let apiError = error as? MobileAPIError
+            errorMessage = apiError?.localizedDescription
+                ?? Strings.localized("error.network", language: .persistedOrDevice())
+            if let activeJobID, apiError?.isTerminal == true {
                 ActiveRenderStore.clear(jobID: activeJobID)
                 await RenderLiveActivityController.shared.finish(jobID: activeJobID, failed: true)
                 self.activeJobID = nil
@@ -178,21 +177,4 @@ final class AppModel {
         }
     }
 
-    private var overallProgress: Double {
-        guard !steps.isEmpty else { return 0 }
-        return steps.reduce(0) { $0 + min(max($1.progress, 0), 1) } / Double(steps.count)
-    }
-
-    private func phaseLabel(stepID: String, value: Double) -> String {
-        let phase: String
-        switch stepID {
-        case "script": phase = "Script"
-        case "voice": phase = "Voice"
-        case "motion": phase = "Motion"
-        case "audio": phase = "Audio mix"
-        case "render": phase = "Render"
-        default: phase = "Processing"
-        }
-        return "\(phase) \(Int((min(max(value, 0), 1) * 100).rounded()))%"
-    }
 }

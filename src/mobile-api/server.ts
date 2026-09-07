@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { ScriptSchema } from "../render/script-schema.js";
+import { LIVE_ACTIVITY_LOCALES, type LiveActivityLocale } from "./apns-live-activity.js";
 import type { RenderJobSnapshot, createRenderJobManager } from "./job-manager.js";
 import type { ScriptGenerator } from "./script-generator.js";
 import { SourceRequestSchema, type SourceResolver } from "./source-input.js";
@@ -15,7 +16,7 @@ type MobileApiServerOptions = {
   writeToken?: string;
   liveActivityPush?: {
     pushEnabled: boolean;
-    register(jobID: string, token: string): boolean;
+    register(jobID: string, token: string, locale: LiveActivityLocale): boolean;
   };
 };
 
@@ -68,6 +69,15 @@ function requireWriteAuthorization(request: IncomingMessage, response: ServerRes
   response.setHeader("www-authenticate", "Bearer");
   sendJson(response, 401, { error: "unauthorized" });
   return false;
+}
+
+function parseLiveActivityLocale(value: unknown): LiveActivityLocale | null {
+  if (value === undefined) return "en";
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return "en";
+  const locale = normalized as LiveActivityLocale;
+  return LIVE_ACTIVITY_LOCALES.has(locale) ? locale : null;
 }
 
 export function createMobileApiServer(
@@ -168,7 +178,15 @@ export function createMobileApiServer(
         sendJson(response, 400, { error: "invalid_live_activity_token" });
         return;
       }
-      const accepted = options.liveActivityPush.register(jobPath.id, token);
+      const localeValue = typeof body.data === "object" && body.data !== null && "locale" in body.data
+        ? (body.data as { locale: unknown }).locale
+        : undefined;
+      const locale = parseLiveActivityLocale(localeValue);
+      if (!locale) {
+        sendJson(response, 400, { error: "invalid_live_activity_locale" });
+        return;
+      }
+      const accepted = options.liveActivityPush.register(jobPath.id, token, locale);
       if (!accepted) {
         sendJson(response, 409, { error: "live_activity_registration_rejected" });
         return;

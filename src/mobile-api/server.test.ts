@@ -27,7 +27,7 @@ async function startServer(
   runner: PipelineRunner,
   generation?: { sourceResolver: SourceResolver; scriptGenerator: ScriptGenerator },
   writeToken?: string,
-  liveActivityPush?: { pushEnabled: boolean; register(jobID: string, token: string): boolean },
+  liveActivityPush?: { pushEnabled: boolean; register(jobID: string, token: string, locale: string): boolean },
 ) {
   const outputRoot = await mkdtemp(join(tmpdir(), "auto-video-gen-api-"));
   tempDirs.push(outputRoot);
@@ -150,11 +150,11 @@ describe("createMobileApiServer", () => {
   });
 
   it("registers authenticated Live Activity push tokens for an existing job", async () => {
-    const registrations: Array<{ jobID: string; token: string }> = [];
+    const registrations: Array<{ jobID: string; token: string; locale: string }> = [];
     const liveActivityPush = {
       pushEnabled: true,
-      register(jobID: string, token: string) {
-        registrations.push({ jobID, token });
+      register(jobID: string, token: string, locale: string) {
+        registrations.push({ jobID, token, locale });
         return true;
       },
     };
@@ -187,18 +187,18 @@ describe("createMobileApiServer", () => {
         authorization: "Bearer physical-device-token",
         "content-type": "application/json",
       },
-      body: JSON.stringify({ token }),
+      body: JSON.stringify({ token, locale: "vi" }),
     });
     expect(registered.status).toBe(202);
     expect(await registered.json()).toEqual({ ok: true, pushEnabled: true });
-    expect(registrations).toEqual([{ jobID: created.id, token }]);
+    expect(registrations).toEqual([{ jobID: created.id, token, locale: "vi" }]);
   });
 
   it("accepts Live Activity tokens while remote APNs publishing is disabled", async () => {
     const registrations: string[] = [];
     const liveActivityPush = {
       pushEnabled: false,
-      register(_jobID: string, token: string) {
+      register(_jobID: string, token: string, _locale: string) {
         registrations.push(token);
         return true;
       },
@@ -228,7 +228,49 @@ describe("createMobileApiServer", () => {
     });
     expect(registered.status).toBe(202);
     expect(await registered.json()).toEqual({ ok: true, pushEnabled: false });
-    expect(registrations).toEqual([token]);
+
+    const emptyLocaleToken = "ce".repeat(32);
+    const emptyLocale = await fetch(`${baseUrl}/v1/render-jobs/${created.id}/live-activity-token`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer physical-device-token",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ token: emptyLocaleToken, locale: "" }),
+    });
+    expect(emptyLocale.status).toBe(202);
+    expect(registrations).toEqual([token, emptyLocaleToken]);
+  });
+
+  it("rejects unsupported Live Activity locales", async () => {
+    const liveActivityPush = {
+      pushEnabled: true,
+      register() { return true; },
+    };
+    const runner: PipelineRunner = async (scriptPath) => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      await writeFile(join(dirname(scriptPath), "video.mp4"), "video");
+    };
+    const baseUrl = await startServer(runner, undefined, "physical-device-token", liveActivityPush);
+    const createdResponse = await fetch(`${baseUrl}/v1/render-jobs`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer physical-device-token",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ script: await loadFixtureScript() }),
+    });
+    const created = await createdResponse.json() as { id: string };
+    const response = await fetch(`${baseUrl}/v1/render-jobs/${created.id}/live-activity-token`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer physical-device-token",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ token: "ef".repeat(32), locale: "de" }),
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "invalid_live_activity_locale" });
   });
 
   it("holds the wait endpoint until a job reaches a terminal state", async () => {

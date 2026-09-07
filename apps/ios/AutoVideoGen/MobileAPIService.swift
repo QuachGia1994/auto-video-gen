@@ -28,25 +28,25 @@ private struct RenderJobResponse: Decodable, Sendable {
     let voice: String
     let status: String
     let progress: Progress?
-    let error: String?
     let videoUrl: String?
 }
 
-private struct APIErrorBody: Decodable {
-    let error: String?
-    let message: String?
-}
-
 struct MobileAPIError: LocalizedError, Sendable {
-    let message: String
+    let messageKey: String
+    let replacements: [String: String]
     let isTerminal: Bool
 
-    init(message: String, isTerminal: Bool = false) {
-        self.message = message
+    init(_ messageKey: String, replacements: [String: String] = [:], isTerminal: Bool = false) {
+        self.messageKey = messageKey
+        self.replacements = replacements
         self.isTerminal = isTerminal
     }
 
-    var errorDescription: String? { message }
+    var errorDescription: String? {
+        replacements.reduce(Strings.localized(messageKey, language: .persistedOrDevice())) { message, replacement in
+            message.replacingOccurrences(of: "{\(replacement.key)}", with: replacement.value)
+        }
+    }
 }
 
 struct MobileAPIVideoGenerationService: VideoGenerationService {
@@ -82,10 +82,7 @@ struct MobileAPIVideoGenerationService: VideoGenerationService {
             let task = Task {
                 do {
                     guard let baseURL else {
-                        throw MobileAPIError(
-                            message: "Backend not configured. Set MobileAPIBaseURL before generating a video.",
-                            isTerminal: true
-                        )
+                        throw MobileAPIError("error.backendNotConfigured", isTerminal: true)
                     }
 
                     var job: RenderJobResponse
@@ -119,12 +116,12 @@ struct MobileAPIVideoGenerationService: VideoGenerationService {
         while true {
             for event in progressEvents(job) { continuation.yield(event) }
             if job.status == "failed" {
-                throw MobileAPIError(message: job.error ?? "Render failed", isTerminal: true)
+                throw MobileAPIError("error.renderFailed", isTerminal: true)
             }
             if job.status == "completed" {
                 guard let videoPath = job.videoUrl,
                       let videoURL = URL(string: videoPath, relativeTo: baseURL)?.absoluteURL else {
-                    throw MobileAPIError(message: "Render completed without a video URL", isTerminal: true)
+                    throw MobileAPIError("error.missingVideoURL", isTerminal: true)
                 }
                 continuation.yield(.completed(VideoProject(
                     id: UUID(uuidString: job.id) ?? UUID(),
@@ -132,7 +129,7 @@ struct MobileAPIVideoGenerationService: VideoGenerationService {
                     duration: nil,
                     createdAt: .now,
                     status: .completed,
-                    theme: "Server default",
+                    theme: nil,
                     voice: job.voice,
                     sceneCount: job.sceneCount,
                     videoURL: videoURL
@@ -143,11 +140,17 @@ struct MobileAPIVideoGenerationService: VideoGenerationService {
 
             try Task.checkCancellation()
             guard Date.now < deadline else {
-                throw MobileAPIError(message: "Generation timed out after 30 minutes")
+                throw MobileAPIError("error.timeout", isTerminal: true)
             }
             try await Task.sleep(for: .milliseconds(pollDelayMilliseconds))
             pollDelayMilliseconds = min(Int(Double(pollDelayMilliseconds) * 1.4), 2_500)
-            job = try await fetchJob(id: job.id, baseURL: baseURL)
+            do {
+                job = try await fetchJob(id: job.id, baseURL: baseURL)
+            } catch let error as MobileAPIError where error.isTerminal {
+                throw error
+            } catch {
+                continue
+            }
         }
     }
 
@@ -162,7 +165,7 @@ struct MobileAPIVideoGenerationService: VideoGenerationService {
 
     private func request(path: String, method: String, body: Data?, baseURL: URL) async throws -> RenderJobResponse {
         guard let url = URL(string: path, relativeTo: baseURL)?.absoluteURL else {
-            throw MobileAPIError(message: "Invalid backend URL", isTerminal: true)
+            throw MobileAPIError("error.invalidBackendURL", isTerminal: true)
         }
         var request = URLRequest(url: url)
         request.httpMethod = method
@@ -171,12 +174,12 @@ struct MobileAPIVideoGenerationService: VideoGenerationService {
         if let authToken { request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization") }
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {
-            throw MobileAPIError(message: "Invalid backend response")
+            throw MobileAPIError("error.invalidBackendResponse")
         }
         guard (200..<300).contains(http.statusCode) else {
-            let error = try? JSONDecoder().decode(APIErrorBody.self, from: data)
             throw MobileAPIError(
-                message: error?.message ?? error?.error ?? "Backend HTTP \(http.statusCode)",
+                "error.backendHttp",
+                replacements: ["status": String(http.statusCode)],
                 isTerminal: (400..<500).contains(http.statusCode)
             )
         }
@@ -193,6 +196,21 @@ struct MobileAPIVideoGenerationService: VideoGenerationService {
             let renderProgress = step >= 8 ? 1 : min(max(job.progress?.fraction ?? 0.05, 0), 1)
             events.append(.progress(stepID: "render", value: renderProgress))
         }
+        events.append(.overallProgress(liveActivityProgress(job)))
         return events
+    }
+
+    private func liveActivityProgress(_ job: RenderJobResponse) -> Double {
+        let total = max(job.progress?.total ?? 8, 1)
+        let step = min(max(job.progress?.step ?? 1, 1), total)
+        let inner: Double
+        if step >= total {
+            inner = 1
+        } else if step == total - 1 {
+            inner = min(max(job.progress?.fraction ?? 0, 0), 1)
+        } else {
+            inner = 0
+        }
+        return min(max((Double(step - 1) + inner) / Double(total), 0), 1)
     }
 }

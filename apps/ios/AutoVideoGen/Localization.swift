@@ -5,6 +5,8 @@ import SwiftUI
 // Runtime in-app localization. Shared conceptually with apps/android/lib/i18n/resources.ts.
 // Date/time formatting uses SwiftUI format styles with the injected locale.
 
+private let appLanguageStorageKey = "app_language"
+
 enum AppLanguage: String, CaseIterable, Identifiable, Sendable {
     case vi, en, zh, ja, fr
 
@@ -38,32 +40,35 @@ enum AppLanguage: String, CaseIterable, Identifiable, Sendable {
         if code.hasPrefix("fr") { return .fr }
         return .en
     }
+
+    static func persistedOrDevice() -> AppLanguage {
+        guard let raw = UserDefaults.standard.string(forKey: appLanguageStorageKey),
+              let stored = AppLanguage(rawValue: raw) else { return .fromDevice() }
+        return stored
+    }
 }
 
 @MainActor
 @Observable
 final class Localizer {
-    private static let storageKey = "app_language"
-
     var language: AppLanguage {
-        didSet { UserDefaults.standard.set(language.rawValue, forKey: Self.storageKey) }
+        didSet { UserDefaults.standard.set(language.rawValue, forKey: appLanguageStorageKey) }
     }
 
     init() {
-        if let raw = UserDefaults.standard.string(forKey: Self.storageKey),
-           let stored = AppLanguage(rawValue: raw) {
-            language = stored
-        } else {
-            language = .fromDevice()
-        }
+        language = .persistedOrDevice()
     }
 
     func t(_ key: String) -> String {
-        Strings.table[language]?[key] ?? Strings.table[.en]?[key] ?? key
+        Strings.localized(key, language: language)
     }
 }
 
 enum Strings {
+    static func localized(_ key: String, language: AppLanguage) -> String {
+        table[language]?[key] ?? table[.en]?[key] ?? key
+    }
+
     static let table: [AppLanguage: [String: String]] = [
         .en: [
             "app.tagline": "AI short-video studio",
@@ -127,12 +132,16 @@ enum Strings {
             "preview.mockupTagline": "A BRIGHTER STORY IN 60 SECONDS",
             "preview.renderedMp4": "Rendered MP4",
             "preview.scenes": "Scenes",
-            "preview.exportMp4": "Export MP4",
+            "preview.openMp4": "Open MP4",
             "preview.unavailableTitle": "Video unavailable",
             "preview.unavailableBody": "This project does not have a rendered MP4 URL.",
             "preview.theme": "Theme",
             "preview.serverDefault": "Server default",
             "preview.voice": "Voice",
+            "notification.videoReadyTitle": "Video ready",
+            "notification.videoReadyBody": "{title} finished rendering and is ready to review.",
+            "notification.renderStoppedTitle": "Render stopped",
+            "notification.renderStoppedBody": "{title} could not be completed.",
             "scene.hook": "Hook",
             "scene.keyPoint": "Key point",
             "scene.outro": "Outro",
@@ -150,6 +159,15 @@ enum Strings {
             "status.processing": "Processing",
             "status.completed": "Completed",
             "common.rendered": "Rendered",
+            "common.ok": "OK",
+            "error.backendNotConfigured": "Backend is not configured. Set MobileAPIBaseURL before generating a video.",
+            "error.renderFailed": "Render failed.",
+            "error.missingVideoURL": "Render completed without a video URL.",
+            "error.timeout": "Generation timed out after 30 minutes.",
+            "error.invalidBackendURL": "Backend URL is invalid.",
+            "error.invalidBackendResponse": "Backend returned an invalid response.",
+            "error.backendHttp": "Backend returned HTTP {status}.",
+            "error.network": "Network request failed. Check your connection and try again.",
         ],
         .vi: [
             "app.tagline": "Xưởng video ngắn AI",
@@ -213,12 +231,16 @@ enum Strings {
             "preview.mockupTagline": "CÂU CHUYỆN TRONG 60 GIÂY",
             "preview.renderedMp4": "MP4 đã render",
             "preview.scenes": "Cảnh",
-            "preview.exportMp4": "Xuất MP4",
+            "preview.openMp4": "Mở MP4",
             "preview.unavailableTitle": "Video không khả dụng",
             "preview.unavailableBody": "Dự án này chưa có đường dẫn MP4.",
             "preview.theme": "Chủ đề",
             "preview.serverDefault": "Mặc định máy chủ",
             "preview.voice": "Giọng đọc",
+            "notification.videoReadyTitle": "Video đã sẵn sàng",
+            "notification.videoReadyBody": "{title} đã render xong và sẵn sàng để xem.",
+            "notification.renderStoppedTitle": "Đã dừng render",
+            "notification.renderStoppedBody": "{title} không thể hoàn tất.",
             "scene.hook": "Mở đầu",
             "scene.keyPoint": "Ý chính",
             "scene.outro": "Kết",
@@ -236,6 +258,15 @@ enum Strings {
             "status.processing": "Đang xử lý",
             "status.completed": "Hoàn tất",
             "common.rendered": "Đã render",
+            "common.ok": "OK",
+            "error.backendNotConfigured": "Máy chủ chưa được cấu hình. Hãy đặt MobileAPIBaseURL trước khi tạo video.",
+            "error.renderFailed": "Render thất bại.",
+            "error.missingVideoURL": "Render đã hoàn tất nhưng không có URL video.",
+            "error.timeout": "Quá trình tạo video đã hết thời gian chờ sau 30 phút.",
+            "error.invalidBackendURL": "URL máy chủ không hợp lệ.",
+            "error.invalidBackendResponse": "Máy chủ trả về phản hồi không hợp lệ.",
+            "error.backendHttp": "Máy chủ trả về HTTP {status}.",
+            "error.network": "Yêu cầu mạng thất bại. Hãy kiểm tra kết nối và thử lại.",
         ],
         .zh: [
             "app.tagline": "AI 短视频工作室",
@@ -299,12 +330,16 @@ enum Strings {
             "preview.mockupTagline": "60 秒讲清一个故事",
             "preview.renderedMp4": "已渲染 MP4",
             "preview.scenes": "场景",
-            "preview.exportMp4": "导出 MP4",
+            "preview.openMp4": "打开 MP4",
             "preview.unavailableTitle": "视频不可用",
             "preview.unavailableBody": "此项目没有已渲染的 MP4 链接。",
             "preview.theme": "主题",
             "preview.serverDefault": "服务器默认",
             "preview.voice": "配音",
+            "notification.videoReadyTitle": "视频已就绪",
+            "notification.videoReadyBody": "{title} 已完成渲染，可以查看。",
+            "notification.renderStoppedTitle": "渲染已停止",
+            "notification.renderStoppedBody": "{title} 无法完成。",
             "scene.hook": "开场",
             "scene.keyPoint": "要点",
             "scene.outro": "结尾",
@@ -322,6 +357,15 @@ enum Strings {
             "status.processing": "处理中",
             "status.completed": "已完成",
             "common.rendered": "已渲染",
+            "common.ok": "确定",
+            "error.backendNotConfigured": "后端尚未配置。生成视频前请设置 MobileAPIBaseURL。",
+            "error.renderFailed": "渲染失败。",
+            "error.missingVideoURL": "渲染已完成，但没有视频 URL。",
+            "error.timeout": "生成视频在 30 分钟后超时。",
+            "error.invalidBackendURL": "后端 URL 无效。",
+            "error.invalidBackendResponse": "后端返回了无效响应。",
+            "error.backendHttp": "后端返回 HTTP {status}。",
+            "error.network": "网络请求失败。请检查连接后重试。",
         ],
         .ja: [
             "app.tagline": "AI ショート動画スタジオ",
@@ -385,12 +429,16 @@ enum Strings {
             "preview.mockupTagline": "60秒でわかるストーリー",
             "preview.renderedMp4": "書き出し済み MP4",
             "preview.scenes": "シーン",
-            "preview.exportMp4": "MP4 を書き出す",
+            "preview.openMp4": "MP4 を開く",
             "preview.unavailableTitle": "動画は利用できません",
             "preview.unavailableBody": "このプロジェクトには書き出し済みの MP4 URL がありません。",
             "preview.theme": "テーマ",
             "preview.serverDefault": "サーバー既定",
             "preview.voice": "音声",
+            "notification.videoReadyTitle": "動画の準備ができました",
+            "notification.videoReadyBody": "{title} のレンダリングが完了し、確認できます。",
+            "notification.renderStoppedTitle": "レンダリングを停止しました",
+            "notification.renderStoppedBody": "{title} を完了できませんでした。",
             "scene.hook": "フック",
             "scene.keyPoint": "要点",
             "scene.outro": "アウトロ",
@@ -408,6 +456,15 @@ enum Strings {
             "status.processing": "処理中",
             "status.completed": "完了",
             "common.rendered": "書き出し済み",
+            "common.ok": "OK",
+            "error.backendNotConfigured": "バックエンドが設定されていません。動画を生成する前に MobileAPIBaseURL を設定してください。",
+            "error.renderFailed": "レンダリングに失敗しました。",
+            "error.missingVideoURL": "レンダリングは完了しましたが、動画 URL がありません。",
+            "error.timeout": "動画生成は 30 分でタイムアウトしました。",
+            "error.invalidBackendURL": "バックエンド URL が無効です。",
+            "error.invalidBackendResponse": "バックエンドから無効な応答が返されました。",
+            "error.backendHttp": "バックエンドが HTTP {status} を返しました。",
+            "error.network": "ネットワーク要求に失敗しました。接続を確認して再試行してください。",
         ],
         .fr: [
             "app.tagline": "Studio de vidéos courtes IA",
@@ -471,12 +528,16 @@ enum Strings {
             "preview.mockupTagline": "UNE HISTOIRE EN 60 SECONDES",
             "preview.renderedMp4": "MP4 rendu",
             "preview.scenes": "Scènes",
-            "preview.exportMp4": "Exporter en MP4",
+            "preview.openMp4": "Ouvrir le MP4",
             "preview.unavailableTitle": "Vidéo indisponible",
             "preview.unavailableBody": "Ce projet n'a pas d'URL MP4 rendue.",
             "preview.theme": "Thème",
             "preview.serverDefault": "Valeur serveur par défaut",
             "preview.voice": "Voix",
+            "notification.videoReadyTitle": "Vidéo prête",
+            "notification.videoReadyBody": "Le rendu de {title} est terminé et prêt à être visionné.",
+            "notification.renderStoppedTitle": "Rendu interrompu",
+            "notification.renderStoppedBody": "Le rendu de {title} n’a pas pu être terminé.",
             "scene.hook": "Accroche",
             "scene.keyPoint": "Point clé",
             "scene.outro": "Conclusion",
@@ -494,6 +555,15 @@ enum Strings {
             "status.processing": "En cours",
             "status.completed": "Terminé",
             "common.rendered": "Rendu",
+            "common.ok": "OK",
+            "error.backendNotConfigured": "Le backend n’est pas configuré. Définissez MobileAPIBaseURL avant de générer une vidéo.",
+            "error.renderFailed": "Le rendu a échoué.",
+            "error.missingVideoURL": "Le rendu est terminé, mais aucune URL vidéo n’est disponible.",
+            "error.timeout": "La génération a expiré après 30 minutes.",
+            "error.invalidBackendURL": "L’URL du backend est invalide.",
+            "error.invalidBackendResponse": "Le backend a renvoyé une réponse invalide.",
+            "error.backendHttp": "Le backend a renvoyé HTTP {status}.",
+            "error.network": "La requête réseau a échoué. Vérifiez votre connexion et réessayez.",
         ],
     ]
 }

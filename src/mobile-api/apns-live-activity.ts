@@ -4,12 +4,13 @@ import { connect, type ClientHttp2Session } from "node:http2";
 
 export type LiveActivityContentState = {
   progress: number;
-  phase: string;
   completed: boolean;
   failed: boolean;
 };
 
 export type LiveActivityPushEvent = "update" | "end";
+export type LiveActivityLocale = "vi" | "en" | "zh" | "ja" | "fr";
+export const LIVE_ACTIVITY_LOCALES = new Set<LiveActivityLocale>(["vi", "en", "zh", "ja", "fr"]);
 
 export interface LiveActivityPushPublisher {
   send(args: {
@@ -17,6 +18,7 @@ export interface LiveActivityPushPublisher {
     event: LiveActivityPushEvent;
     state: LiveActivityContentState;
     title?: string;
+    locale: LiveActivityLocale;
   }): Promise<void>;
   close(): void;
 }
@@ -97,7 +99,56 @@ function createProviderToken(config: Extract<APNsLiveActivityConfig, { authMode:
   return `${signingInput}.${base64Url(signature)}`;
 }
 
-export function buildLiveActivityPushPayload(event: LiveActivityPushEvent, state: LiveActivityContentState, title?: string) {
+const ALERT_COPY: Record<LiveActivityLocale, {
+  readyTitle: string;
+  readyBody: (title: string) => string;
+  stoppedTitle: string;
+  stoppedBody: (title: string) => string;
+  fallbackTitle: string;
+}> = {
+  en: {
+    readyTitle: "Video ready",
+    readyBody: (title) => `${title} finished rendering and is ready to review.`,
+    stoppedTitle: "Render stopped",
+    stoppedBody: (title) => `${title} could not be completed.`,
+    fallbackTitle: "Video",
+  },
+  vi: {
+    readyTitle: "Video đã sẵn sàng",
+    readyBody: (title) => `${title} đã render xong và sẵn sàng để xem.`,
+    stoppedTitle: "Đã dừng render",
+    stoppedBody: (title) => `${title} không thể hoàn tất.`,
+    fallbackTitle: "Video",
+  },
+  zh: {
+    readyTitle: "视频已就绪",
+    readyBody: (title) => `${title} 已完成渲染，可以查看。`,
+    stoppedTitle: "渲染已停止",
+    stoppedBody: (title) => `${title} 无法完成。`,
+    fallbackTitle: "视频",
+  },
+  ja: {
+    readyTitle: "動画の準備ができました",
+    readyBody: (title) => `${title} のレンダリングが完了し、確認できます。`,
+    stoppedTitle: "レンダリングを停止しました",
+    stoppedBody: (title) => `${title} を完了できませんでした。`,
+    fallbackTitle: "動画",
+  },
+  fr: {
+    readyTitle: "Vidéo prête",
+    readyBody: (title) => `Le rendu de ${title} est terminé et prêt à être visionné.`,
+    stoppedTitle: "Rendu interrompu",
+    stoppedBody: (title) => `Le rendu de ${title} n’a pas pu être terminé.`,
+    fallbackTitle: "Vidéo",
+  },
+};
+
+export function buildLiveActivityPushPayload(
+  event: LiveActivityPushEvent,
+  state: LiveActivityContentState,
+  title?: string,
+  locale: LiveActivityLocale = "en",
+) {
   const now = Math.floor(Date.now() / 1_000);
   const aps: Record<string, unknown> = {
     timestamp: now,
@@ -108,11 +159,11 @@ export function buildLiveActivityPushPayload(event: LiveActivityPushEvent, state
     aps["stale-date"] = now + 120;
   } else {
     aps["dismissal-date"] = now + 15 * 60;
+    const copy = ALERT_COPY[locale];
+    const displayTitle = title?.trim() || copy.fallbackTitle;
     aps.alert = {
-      title: state.failed ? "Render stopped" : "Video ready",
-      body: state.failed
-        ? `${title || "Video"} could not be completed.`
-        : `${title || "Video"} finished rendering and is ready to review.`,
+      title: state.failed ? copy.stoppedTitle : copy.readyTitle,
+      body: state.failed ? copy.stoppedBody(displayTitle) : copy.readyBody(displayTitle),
       sound: "default",
     };
   }
@@ -152,8 +203,8 @@ export function createAPNsLiveActivityPublisher(config: APNsLiveActivityConfig):
   };
 
   return {
-    async send({ token, event, state, title }) {
-      const payload = JSON.stringify(buildLiveActivityPushPayload(event, state, title));
+    async send({ token, event, state, title, locale }) {
+      const payload = JSON.stringify(buildLiveActivityPushPayload(event, state, title, locale));
       const client = getSession();
       await new Promise<void>((resolve, reject) => {
         let status = 0;

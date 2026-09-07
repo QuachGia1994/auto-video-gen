@@ -349,6 +349,7 @@ struct GenerationView: View {
 
 struct PreviewView: View {
     @Environment(\.openURL) private var openURL
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(Localizer.self) private var loc
     let project: VideoProject
     @State private var showBackendNotice = false
@@ -361,14 +362,8 @@ struct PreviewView: View {
                     videoMock
                     sceneStrip
                     options
-                    Button {
-                        if let videoURL = project.videoURL {
-                            openURL(videoURL)
-                        } else {
-                            showBackendNotice = true
-                        }
-                    } label: {
-                        Label(loc.t("preview.exportMp4"), systemImage: "square.and.arrow.up")
+                    Button(action: openVideo) {
+                        Label(loc.t("preview.openMp4"), systemImage: "play.rectangle")
                             .fontWeight(.semibold)
                             .frame(maxWidth: .infinity)
                             .frame(height: 52)
@@ -393,7 +388,7 @@ struct PreviewView: View {
             }
         }
         .alert(loc.t("preview.unavailableTitle"), isPresented: $showBackendNotice) {
-            Button("OK", role: .cancel) {}
+            Button(loc.t("common.ok"), role: .cancel) {}
         } message: {
             Text(loc.t("preview.unavailableBody"))
         }
@@ -424,10 +419,14 @@ struct PreviewView: View {
                     .tracking(1.3)
                     .foregroundStyle(.white.opacity(0.72))
                 Spacer()
-                Image(systemName: "play.circle.fill")
-                    .font(.system(size: 58))
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(.white)
+                Button(action: openVideo) {
+                    Image(systemName: "play.circle.fill")
+                        .font(.system(size: 58))
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(.white)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(loc.t("preview.openMp4"))
                 Text(project.duration.map { "0:00 / \($0)" } ?? loc.t("preview.renderedMp4"))
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.white.opacity(0.72))
@@ -474,30 +473,55 @@ struct PreviewView: View {
     }
 
     private var options: some View {
-        HStack(alignment: .top, spacing: 12) {
-            SurfaceCard {
-                VStack(alignment: .leading, spacing: 6) {
-                    Label(loc.t("preview.theme"), systemImage: "paintpalette")
-                        .font(.caption)
-                        .foregroundStyle(Brand.muted)
-                        .lineLimit(1)
-                    Text(project.theme == "Server default" ? loc.t("preview.serverDefault") : project.theme)
-                        .font(.subheadline.bold())
-                        .lineLimit(2)
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(spacing: 12) {
+                    themeCard
+                    voiceCard
                 }
-            }
-            SurfaceCard {
-                VStack(alignment: .leading, spacing: 6) {
-                    Label(loc.t("preview.voice"), systemImage: "waveform")
-                        .font(.caption)
-                        .foregroundStyle(Brand.muted)
-                        .lineLimit(1)
-                    Text(project.voice)
-                        .font(.subheadline.bold())
-                        .lineLimit(2)
+            } else {
+                HStack(alignment: .top, spacing: 12) {
+                    themeCard
+                    voiceCard
                 }
             }
         }
+    }
+
+    private var themeCard: some View {
+        SurfaceCard {
+            VStack(alignment: .leading, spacing: 6) {
+                Label(loc.t("preview.theme"), systemImage: "paintpalette")
+                    .font(.caption)
+                    .foregroundStyle(Brand.muted)
+                    .lineLimit(1)
+                Text(project.theme ?? loc.t("preview.serverDefault"))
+                    .font(.subheadline.bold())
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var voiceCard: some View {
+        SurfaceCard {
+            VStack(alignment: .leading, spacing: 6) {
+                Label(loc.t("preview.voice"), systemImage: "waveform")
+                    .font(.caption)
+                    .foregroundStyle(Brand.muted)
+                    .lineLimit(1)
+                Text(project.voice)
+                    .font(.subheadline.bold())
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private func openVideo() {
+        guard let videoURL = project.videoURL else {
+            showBackendNotice = true
+            return
+        }
+        openURL(videoURL)
     }
 }
 

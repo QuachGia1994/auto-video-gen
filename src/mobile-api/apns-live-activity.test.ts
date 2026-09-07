@@ -43,14 +43,12 @@ describe("buildLiveActivityPushPayload", () => {
   it("builds update payloads with content state and stale date", () => {
     const payload = buildLiveActivityPushPayload("update", {
       progress: 0.42,
-      phase: "Rendering frames",
       completed: false,
       failed: false,
     }) as { aps: Record<string, unknown> };
     expect(payload.aps.event).toBe("update");
     expect(payload.aps["content-state"]).toEqual({
       progress: 0.42,
-      phase: "Rendering frames",
       completed: false,
       failed: false,
     });
@@ -60,14 +58,23 @@ describe("buildLiveActivityPushPayload", () => {
   it("builds terminal alerts on end", () => {
     const payload = buildLiveActivityPushPayload("end", {
       progress: 1,
-      phase: "Ready to review",
       completed: true,
       failed: false,
-    }, "My video") as { aps: Record<string, any> };
+    }, "My video", "en") as { aps: Record<string, any> };
     expect(payload.aps.event).toBe("end");
     expect(payload.aps.alert.title).toBe("Video ready");
     expect(payload.aps.alert.body).toContain("My video");
     expect(payload.aps.alert.sound).toBe("default");
     expect(typeof payload.aps["dismissal-date"]).toBe("number");
+  });
+
+  it("localizes terminal alerts to the registered app locale", () => {
+    const payload = buildLiveActivityPushPayload("end", {
+      progress: 1,
+      completed: true,
+      failed: false,
+    }, "Bản tin sáng", "vi") as { aps: Record<string, any> };
+    expect(payload.aps.alert.title).toBe("Video đã sẵn sàng");
+    expect(payload.aps.alert.body).toBe("Bản tin sáng đã render xong và sẵn sàng để xem.");
   });
 });

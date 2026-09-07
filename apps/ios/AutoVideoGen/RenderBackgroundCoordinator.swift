@@ -60,8 +60,9 @@ private struct LiveActivityRegistrationResponse: Decodable {
 private enum LiveActivityPushTokenRegistrar {
     static func register(jobID: String, token: Data, baseURL: URL, authToken: String?) async {
         let hexToken = token.map { String(format: "%02x", $0) }.joined()
+        let locale = AppLanguage.persistedOrDevice().rawValue
         guard let url = URL(string: "/v1/render-jobs/\(jobID)/live-activity-token", relativeTo: baseURL)?.absoluteURL,
-              let body = try? JSONSerialization.data(withJSONObject: ["token": hexToken]) else { return }
+              let body = try? JSONSerialization.data(withJSONObject: ["token": hexToken, "locale": locale]) else { return }
 
         for attempt in 0..<4 {
             var request = URLRequest(url: url)
@@ -104,7 +105,6 @@ final class RenderLiveActivityController {
         } else {
             let state = RenderActivityAttributes.ContentState(
                 progress: 0.05,
-                phase: "Queued",
                 completed: false,
                 failed: false
             )
@@ -151,10 +151,9 @@ final class RenderLiveActivityController {
         }
     }
 
-    func update(jobID: String, progress: Double, phase: String) async {
+    func update(jobID: String, progress: Double) async {
         let state = RenderActivityAttributes.ContentState(
             progress: min(max(progress, 0), 1),
-            phase: phase,
             completed: false,
             failed: false
         )
@@ -164,7 +163,6 @@ final class RenderLiveActivityController {
     func finish(jobID: String, failed: Bool) async {
         let state = RenderActivityAttributes.ContentState(
             progress: failed ? 0 : 1,
-            phase: failed ? "Render stopped" : "Ready to review",
             completed: !failed,
             failed: failed
         )
@@ -308,15 +306,13 @@ final class BackgroundRenderMonitor: NSObject, URLSessionDownloadDelegate, @unch
 
     private func scheduleCompletionNotification(_ result: BackgroundRenderResult) {
         let content = UNMutableNotificationContent()
-        if result.status == "completed" {
-            content.title = "Video ready"
-            content.body = "\(result.title) finished rendering and is ready to review."
-            content.sound = .default
-        } else {
-            content.title = "Render stopped"
-            content.body = result.error ?? "\(result.title) could not be completed."
-            content.sound = .default
-        }
+        let language = AppLanguage.persistedOrDevice()
+        let titleKey = result.status == "completed" ? "notification.videoReadyTitle" : "notification.renderStoppedTitle"
+        let bodyKey = result.status == "completed" ? "notification.videoReadyBody" : "notification.renderStoppedBody"
+        content.title = Strings.localized(titleKey, language: language)
+        content.body = Strings.localized(bodyKey, language: language)
+            .replacingOccurrences(of: "{title}", with: result.title)
+        content.sound = .default
         content.userInfo = ["jobID": result.id]
         let request = UNNotificationRequest(
             identifier: "render-terminal-\(result.id)",

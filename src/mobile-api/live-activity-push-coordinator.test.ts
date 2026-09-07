@@ -22,7 +22,6 @@ describe("liveActivityStateFor", () => {
       progress: { step: 7, total: 8, message: "Capturing frame 300/1000", fraction: 0.4 },
     }))).toEqual({
       progress: 0.8,
-      phase: "Rendering frames",
       completed: false,
       failed: false,
     });
@@ -31,7 +30,6 @@ describe("liveActivityStateFor", () => {
   it("maps completed jobs to terminal ready state", () => {
     expect(liveActivityStateFor(snapshot({ status: "completed", videoReady: true }))).toEqual({
       progress: 1,
-      phase: "Ready to review",
       completed: true,
       failed: false,
     });
@@ -44,7 +42,21 @@ describe("liveActivityStateFor", () => {
     }));
     expect(state.failed).toBe(true);
     expect(state.completed).toBe(false);
-    expect(state.phase).toBe("Render stopped");
     expect(state.progress).toBeLessThan(1);
+  });
+
+  it("keeps the 8-step progress contract monotonic through render completion", () => {
+    const values = [
+      { step: 1, total: 8, fraction: undefined },
+      { step: 3, total: 8, fraction: undefined },
+      { step: 6, total: 8, fraction: undefined },
+      { step: 7, total: 8, fraction: 0.25 },
+      { step: 7, total: 8, fraction: 0.75 },
+      { step: 8, total: 8, fraction: 1 },
+    ].map((progress) => liveActivityStateFor(snapshot({
+      progress: { ...progress, message: "Progress" },
+    })).progress);
+    expect(values).toEqual([0, 0.25, 0.625, 0.78125, 0.84375, 1]);
+    expect(values).toEqual([...values].sort((a, b) => a - b));
   });
 });
